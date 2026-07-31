@@ -1,0 +1,66 @@
+/**
+ * Тестовый режим для разработки: НЕ часть игрового опыта игрока, только
+ * инструмент для быстрой проверки контента без грайнда за RNG раздачей карт.
+ * Открывается клавишей ` (backtick), мир при этом не останавливается —
+ * можно сразу пробовать выданное оружие в бою.
+ */
+.dev-panel {
+  position: fixed;
+  top: var(--pad);
+  right: var(--pad);
+  z-index: 40;
+  width: min(calc(360px * var(--ui)), 88vw);
+  max-height: calc(100vh - var(--pad) * 2);
+  overflow-y: auto;
+  padding: calc(14px * var(--ui));
+  background: rgba(8, 14, 28, 0.94);
+  border: 1px solid var(--warn);
+  box-shadow: 0 0 calc(30px * var(--ui)) rgba(255, 177, 74, 0.15);
+  pointer-events: auto;
+}
+
+.dev-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: calc(10px * var(--ui));
+  padding-bottom: calc(10px * var(--ui));
+  margin-bottom: calc(10px * var(--ui));
+  border-bottom: 1px solid var(--line-soft);
+  font-size: var(--fs-small);
+  letter-spacing: calc(2px * var(--ui));
+  color: var(--warn);
+}
+.dev-hint { font-size: var(--fs-tiny); color: var(--ink-faint); letter-spacing: 0; }
+
+.dev-section + .dev-section { margin-top: calc(16px * var(--ui)); }
+.dev-section h4 {
+  font-size: var(--fs-tiny);
+  letter-spacing: calc(1.5px * var(--ui));
+  color: var(--ink-faint);
+  font-weight: 500;
+  margin-bottom: calc(8px * var(--ui));
+}
+
+.dev-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(96px * var(--ui)), 1fr));
+  gap: calc(6px * var(--ui));
+}
+
+.dev-btn {
+  pointer-events: auto;
+  font-family: var(--font);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.5px;
+  color: var(--ink);
+  background: rgba(20, 44, 84, 0.35);
+  border: 1px solid var(--line-soft);
+  padding: calc(8px * var(--ui)) calc(6px * var(--ui));
+  cursor: pointer;
+  transition: 0.1s;
+  text-align: center;
+}
+.dev-btn:hover { border-color: var(--warn); background: rgba(255, 177, 74, 0.15); }
+.dev-btn.active { border-color: var(--good); color: var(--good); }
+.dev-btn.owned { border-color: var(--accent); }

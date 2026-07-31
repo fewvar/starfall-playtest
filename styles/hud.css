@@ -1,0 +1,301 @@
+/* Боевой интерфейс. Всё крупное и читается без вглядывания. */
+
+#hud-layer { transition: opacity 0.2s; }
+#hud-layer.dimmed { opacity: 0; }
+
+/* ── левый блок: полосы и характеристики ────── */
+#hud-left {
+  position: absolute;
+  top: var(--pad);
+  left: var(--pad);
+  width: calc(420px * var(--ui));
+  padding: calc(14px * var(--ui)) calc(16px * var(--ui));
+  background: var(--glass);
+  border: 1px solid var(--line-soft);
+  border-left: calc(3px * var(--ui)) solid var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.bar-row { display: flex; align-items: center; gap: calc(10px * var(--ui)); }
+
+.bar-label {
+  width: calc(66px * var(--ui));
+  font-size: var(--fs-tiny);
+  letter-spacing: calc(1.5px * var(--ui));
+  color: var(--ink-faint);
+  flex: none;
+}
+
+.bar {
+  position: relative;
+  flex: 1;
+  height: calc(22px * var(--ui));
+  background: rgba(6, 12, 26, 0.85);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.bar.thin { height: calc(14px * var(--ui)); }
+
+.bar > i {
+  position: absolute;
+  inset: 0;
+  display: block;
+  transform-origin: left center;
+  transition: transform 0.12s linear;
+}
+.bar > b {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: calc(8px * var(--ui));
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.5px;
+  color: #fff;
+  text-shadow: 0 0 5px #000, 0 0 2px #000;
+}
+
+.bar-hp > i     { background: linear-gradient(90deg, #ff3b6b, #ff8f5e); }
+.bar-shield > i { background: linear-gradient(90deg, #3ba7ff, #7ee8ff); }
+.bar-xp > i     { background: linear-gradient(90deg, #8b5cf6, #e879f9); }
+
+#hud-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(4px * var(--ui)) calc(14px * var(--ui));
+  font-size: var(--fs-small);
+  color: var(--ink-faint);
+  letter-spacing: 0.5px;
+}
+#hud-stats b { color: #e8f3ff; }
+#hud-stats .ready { color: var(--accent-bright); }
+#hud-layer .game-term {
+  text-decoration-color: rgba(126, 232, 255, 0.62);
+}
+#hud-layer .game-term:hover,
+#hud-layer .game-term:focus-visible {
+  color: #fff;
+}
+
+/* ── правый блок: счёт и волна ──────────────── */
+#hud-right {
+  position: absolute;
+  top: var(--pad);
+  right: var(--pad);
+  text-align: right;
+}
+
+#score-value {
+  font-size: var(--fs-huge);
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 0 calc(20px * var(--ui)) rgba(74, 163, 255, 0.6);
+}
+
+#sector-label {
+  margin-top: calc(4px * var(--ui));
+  font-size: var(--fs-small);
+  letter-spacing: calc(1.5px * var(--ui));
+  color: var(--ink-faint);
+}
+
+#wave-box {
+  margin-top: calc(12px * var(--ui));
+  display: inline-flex;
+  align-items: baseline;
+  gap: calc(10px * var(--ui));
+  padding: calc(8px * var(--ui)) calc(14px * var(--ui));
+  background: var(--glass);
+  border: 1px solid var(--line-soft);
+  border-right: calc(3px * var(--ui)) solid var(--accent);
+}
+.wave-caption { font-size: var(--fs-tiny); letter-spacing: calc(2px * var(--ui)); color: var(--ink-faint); }
+#wave-value { font-size: var(--fs-big); font-weight: 800; color: #fff; }
+#wave-state {
+  font-size: var(--fs-small);
+  letter-spacing: calc(1px * var(--ui));
+  color: var(--accent-bright);
+}
+#wave-state.danger { color: var(--danger); }
+#wave-state.calm { color: var(--good); }
+
+/* ── полоса босса ───────────────────────────── */
+/* Ниже левого блока HUD: иначе полоса налезает на полосы корпуса и щита. */
+#boss-bar {
+  position: absolute;
+  top: calc(196px * var(--ui));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(calc(620px * var(--ui)), 46vw);
+  text-align: center;
+}
+#boss-name {
+  font-size: var(--fs-mid);
+  font-weight: 700;
+  letter-spacing: calc(6px * var(--ui));
+  color: #ff8fa6;
+  text-shadow: 0 0 calc(16px * var(--ui)) rgba(255, 59, 107, 0.6);
+  margin-bottom: calc(8px * var(--ui));
+}
+#boss-phases {
+  display: grid;
+  grid-template-columns: 4fr 3fr 3fr;
+  gap: calc(5px * var(--ui));
+}
+.boss-phase-track {
+  position: relative;
+  height: calc(16px * var(--ui));
+  background: rgba(30, 8, 16, 0.75);
+  border: 1px solid rgba(255, 107, 138, 0.45);
+  overflow: hidden;
+}
+.boss-phase-track::after {
+  content: attr(data-phase);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 235, 240, 0.7);
+  font-size: calc(9px * var(--ui));
+  font-weight: 800;
+  text-shadow: 0 1px 2px #18050c;
+}
+.boss-phase-track.current {
+  border-color: rgba(255, 177, 74, 0.9);
+  box-shadow: 0 0 calc(12px * var(--ui)) rgba(255, 107, 138, 0.28);
+}
+.boss-phase-track > i {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: linear-gradient(90deg, #ff3b6b, #ffb14a);
+  transition: transform 0.1s linear;
+}
+#boss-info {
+  margin-top: calc(6px * var(--ui));
+  font-size: var(--fs-tiny);
+  letter-spacing: calc(2px * var(--ui));
+  color: #a8768a;
+}
+
+/* ── радар ──────────────────────────────────── */
+#minimap {
+  position: absolute;
+  right: var(--pad);
+  bottom: var(--pad);
+  width: calc(210px * var(--ui));
+  height: calc(210px * var(--ui));
+  border-radius: 50%;
+  border: 1px solid var(--line-soft);
+  background: rgba(6, 12, 26, 0.5);
+}
+
+/* ── нижняя панель: оружие и модули ─────────── */
+#hud-bottom {
+  position: absolute;
+  left: var(--pad);
+  bottom: var(--pad);
+  width: min(calc(560px * var(--ui)), 46vw);
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--ui));
+}
+
+#weapon-list { display: flex; flex-wrap: wrap; gap: calc(6px * var(--ui)); }
+
+.weapon {
+  display: flex;
+  align-items: center;
+  gap: calc(6px * var(--ui));
+  padding: calc(7px * var(--ui)) calc(12px * var(--ui));
+  background: var(--glass);
+  border: 1px solid var(--line-soft);
+  font-size: var(--fs-small);
+  letter-spacing: 0.5px;
+  color: var(--ink-faint);
+}
+.weapon i { font-style: normal; opacity: 0.45; font-size: var(--fs-tiny); }
+.weapon b { font-size: var(--fs-base); }
+.weapon.active {
+  color: #eaf6ff;
+  border-color: var(--accent-bright);
+  background: rgba(30, 70, 120, 0.55);
+  box-shadow: 0 0 calc(16px * var(--ui)) rgba(74, 163, 255, 0.3);
+}
+
+#module-chips { display: flex; flex-wrap: wrap; gap: calc(5px * var(--ui)); }
+
+.chip {
+  --chip-color: var(--accent-bright);
+  font-size: var(--fs-tiny);
+  padding: calc(4px * var(--ui)) calc(9px * var(--ui));
+  border: 1px solid var(--line-soft);
+  border-left: calc(3px * var(--ui)) solid var(--chip-color);
+  background: rgba(12, 22, 44, 0.66);
+  color: #9dc0ee;
+  letter-spacing: 0.5px;
+}
+.chip b { color: var(--chip-color); }
+.chip.rarity-legendary { background: rgba(58, 42, 8, 0.7); }
+.chip.rarity-cursed { background: rgba(48, 10, 24, 0.66); color: #ffb8c8; }
+.chip.stack {
+  --chip-color: var(--good);
+  border-style: dashed;
+  color: #cfe3ff;
+}
+
+/* ── активные способности ───────────────────── */
+#ability-bar { display: flex; flex-wrap: wrap; gap: calc(6px * var(--ui)); }
+
+.ability {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: calc(7px * var(--ui));
+  padding: calc(8px * var(--ui)) calc(13px * var(--ui));
+  min-width: calc(180px * var(--ui));
+  background: rgba(10, 18, 36, 0.85);
+  border: 1px solid var(--line-soft);
+  overflow: hidden;
+  font-size: var(--fs-small);
+  color: var(--ink-faint);
+}
+.ability .ability-cd {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: rgba(255, 59, 107, 0.22);
+  transition: transform 0.08s linear;
+}
+.ability > span { position: relative; }
+.ability-key {
+  width: calc(22px * var(--ui));
+  height: calc(22px * var(--ui));
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: var(--fs-tiny);
+  color: var(--ink);
+  flex: none;
+}
+.ability-icon { font-size: var(--fs-mid); }
+.ability-name { letter-spacing: 0.5px; flex: 1; }
+.ability-timer { font-size: var(--fs-tiny); opacity: 0.8; }
+
+.ability.ready {
+  color: #eaf6ff;
+  border-color: var(--good);
+  box-shadow: 0 0 calc(16px * var(--ui)) rgba(94, 240, 138, 0.25);
+}
+.ability.ready .ability-timer { color: var(--good); }
+
+/* заглушённый радар: проклятие «Туман войны» */
+#minimap.jammed {
+  filter: blur(6px) brightness(0.35);
+  opacity: 0.5;
+}

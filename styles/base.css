@@ -1,0 +1,144 @@
+/* Базовые переменные и сброс. Размер интерфейса регулируется одной переменной --ui. */
+
+:root {
+  /* Общий масштаб всего интерфейса. Меняешь одну цифру — меняется всё:
+     1.0 — компактно, 1.35 — по умолчанию, 1.6 — очень крупно. */
+  --ui: 1.35;
+  --font: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --bg: #05060d;
+  --ink: #cfe3ff;
+  --ink-dim: #7f9dc9;
+  --ink-faint: #5f7ba6;
+
+  --accent: #4aa3ff;
+  --accent-bright: #7ee8ff;
+  --danger: #ff3b6b;
+  --warn: #ffb14a;
+  --good: #5ef08a;
+  --xp: #e879f9;
+  --scrap: #ffc14a;
+
+  --line: rgba(120, 180, 255, 0.28);
+  --line-soft: rgba(120, 180, 255, 0.16);
+  --glass: rgba(9, 16, 32, 0.72);
+  --glass-solid: rgba(10, 18, 36, 0.94);
+
+  /* размеры, завязанные на --ui */
+  --fs-tiny: calc(12px * var(--ui));
+  --fs-small: calc(14px * var(--ui));
+  --fs-base: calc(16px * var(--ui));
+  --fs-mid: calc(20px * var(--ui));
+  --fs-big: calc(28px * var(--ui));
+  --fs-huge: calc(46px * var(--ui));
+  --gap: calc(10px * var(--ui));
+  --pad: calc(18px * var(--ui));
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* Явный display в правилах ниже перебил бы browser-стиль для [hidden],
+   поэтому скрытие задаём принудительно. */
+[hidden] { display: none !important; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+body {
+  font-family: var(--font);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+kbd {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(20, 32, 60, 0.8);
+  color: #dff0ff;
+  font-family: var(--font);
+  font-size: var(--fs-tiny);
+  padding: calc(2px * var(--ui)) calc(7px * var(--ui));
+  margin: 0 2px;
+}
+
+b { font-weight: 700; }
+
+/* ── кнопки ─────────────────────────────────── */
+.btn {
+  pointer-events: auto;
+  font-family: var(--font);
+  font-size: var(--fs-base);
+  letter-spacing: calc(2px * var(--ui));
+  color: var(--ink);
+  background: rgba(20, 44, 84, 0.35);
+  border: 1px solid var(--line);
+  padding: calc(14px * var(--ui)) calc(34px * var(--ui));
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, transform 0.08s, box-shadow 0.12s;
+}
+.btn:hover {
+  background: rgba(74, 163, 255, 0.24);
+  border-color: var(--accent-bright);
+  box-shadow: 0 0 calc(26px * var(--ui)) rgba(74, 163, 255, 0.3);
+}
+.btn:active { transform: translateY(1px); }
+
+.btn-primary {
+  color: #eaf6ff;
+  border-color: var(--accent);
+  background: rgba(30, 80, 150, 0.4);
+}
+.btn-danger { color: #ffb8c8; border-color: rgba(255, 59, 107, 0.5); background: rgba(70, 16, 32, 0.4); }
+.btn-danger:hover { background: rgba(255, 59, 107, 0.22); border-color: var(--danger); box-shadow: none; }
+.btn-ghost { background: transparent; color: var(--ink-dim); }
+
+/* ── всплывающее сообщение ──────────────────── */
+#toast {
+  position: fixed;
+  left: 50%;
+  top: 26%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  z-index: 30;
+}
+#toast.visible { opacity: 1; }
+.toast-main {
+  font-size: var(--fs-big);
+  font-weight: 800;
+  letter-spacing: calc(6px * var(--ui));
+  color: #fff;
+  text-shadow: 0 0 calc(30px * var(--ui)) rgba(74, 163, 255, 0.9);
+}
+.toast-sub {
+  margin-top: calc(8px * var(--ui));
+  font-size: var(--fs-small);
+  letter-spacing: calc(2px * var(--ui));
+  color: var(--ink-dim);
+}
+
+/* на узких экранах ужимаем, чтобы панели не наезжали друг на друга */
+@media (max-width: 1500px) { :root { --ui: 1.2; } }
+@media (max-width: 1250px) { :root { --ui: 1.05; } }
+@media (max-width: 1000px) { :root { --ui: 0.9; } }

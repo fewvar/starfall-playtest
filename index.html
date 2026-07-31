@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>STARFALL — космический рогалик</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%2305060d'/><path d='M6 16 L26 8 L20 16 L26 24 Z' fill='%234aa3ff'/></svg>">
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="styles/hud.css">
+<link rel="stylesheet" href="styles/screens.css">
+<link rel="stylesheet" href="styles/devpanel.css">
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<!-- ─────────────── HUD ─────────────── -->
+<div id="hud-layer" class="layer">
+
+  <div id="hud-left" class="panel-block">
+    <div class="bar-row">
+      <span class="bar-label">КОРПУС</span>
+      <div class="bar bar-hp"><i id="hp-fill"></i><b id="hp-text">100 / 100</b></div>
+    </div>
+    <div class="bar-row" id="shield-row" hidden>
+      <span class="bar-label">ЩИТ</span>
+      <div class="bar bar-shield"><i id="shield-fill"></i><b id="shield-text">0 / 0</b></div>
+    </div>
+    <div class="bar-row">
+      <span class="bar-label">ОПЫТ</span>
+      <div class="bar bar-xp thin"><i id="xp-fill"></i><b id="xp-text">УР. 1</b></div>
+    </div>
+    <div id="hud-stats"></div>
+  </div>
+
+  <div id="hud-right">
+    <div id="score-value">0</div>
+    <div id="sector-label">СЕКТОР 0:0</div>
+    <div id="wave-box">
+      <span id="wave-caption" class="wave-caption">ВОЛНА БИОМА</span>
+      <span id="wave-value">1</span>
+      <span id="wave-state">ГОТОВНОСТЬ</span>
+    </div>
+  </div>
+
+  <div id="boss-bar" hidden>
+    <div id="boss-name">БОСС</div>
+    <div id="boss-phases" aria-label="Здоровье босса по фазам">
+      <div class="boss-phase-track" data-phase="I"><i></i></div>
+      <div class="boss-phase-track" data-phase="II"><i></i></div>
+      <div class="boss-phase-track" data-phase="III"><i></i></div>
+    </div>
+    <div id="boss-info">ФАЗА 1</div>
+  </div>
+
+  <canvas id="minimap" width="210" height="210"></canvas>
+
+  <div id="hud-bottom">
+    <div id="ability-bar"></div>
+    <div id="weapon-list"></div>
+    <div id="module-chips"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ─────────────── Карта сектора (M) ─────────────── -->
+<canvas id="map-canvas" hidden></canvas>
+<div id="map-hint" hidden>ЛКМ — поставить метку · колесо — масштаб · M/Esc — закрыть</div>
+
+<!-- ─────────────── Панель характеристик (Tab) ─────────────── -->
+<section id="screen-stats" class="screen" hidden>
+  <div class="screen-inner stats-inner">
+    <header class="stats-head">
+      <h2>ХАРАКТЕРИСТИКИ</h2>
+      <span class="stats-hint">↑/↓ — термины · Tab — закрыть</span>
+    </header>
+    <div id="stats-columns" class="stats-columns"></div>
+    <div class="stats-modules">
+      <h3 class="section-title">СОБРАННЫЕ МОДУЛИ</h3>
+      <div id="stats-modules-list" class="stats-module-list"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────── Главное меню ─────────────── -->
+<section id="screen-menu" class="screen" hidden>
+  <div class="screen-inner menu-inner">
+    <h1 class="logo">STARFALL</h1>
+    <p class="logo-sub">КОСМИЧЕСКИЙ РОГАЛИК · ВОЛНА ЗА ВОЛНОЙ</p>
+
+    <div id="menu-ship" class="menu-ship"></div>
+
+    <div class="menu-buttons">
+      <button id="btn-play" class="btn btn-primary">НАЧАТЬ ЗАБЕГ</button>
+      <button id="btn-hangar" class="btn">АНГАР</button>
+    </div>
+
+    <div id="menu-stats" class="stat-grid"></div>
+
+    <div class="controls-help">
+      <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> движение</div>
+      <div><kbd>мышь</kbd> прицел · <kbd>ЛКМ</kbd> огонь</div>
+      <div><kbd>Shift</kbd> форсаж · <kbd>ПКМ</kbd> рывок</div>
+      <div><kbd>Q</kbd><kbd>1-5</kbd> смена оружия</div>
+      <div><kbd>Esc</kbd> пауза · <kbd>M</kbd> звук</div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────── Ангар ─────────────── -->
+<section id="screen-hangar" class="screen" hidden>
+  <div class="screen-inner hangar-inner">
+    <header class="hangar-head">
+      <h2>АНГАР</h2>
+      <div class="scrap-counter"><span id="hangar-scrap">0</span> ОБЛОМКОВ</div>
+    </header>
+
+    <nav class="hangar-tabs">
+      <button class="tab-btn active" data-tab="ships">КОРАБЛИ</button>
+      <button class="tab-btn" data-tab="upgrades">ПЕРМАНЕНТНЫЕ УЛУЧШЕНИЯ</button>
+      <button class="tab-btn" data-tab="abilities">СПОСОБНОСТИ</button>
+    </nav>
+
+    <div class="tab-panel" data-panel="ships">
+      <div id="hangar-ships" class="ship-grid"></div>
+    </div>
+    <div class="tab-panel" data-panel="upgrades" hidden>
+      <div id="hangar-upgrades" class="upgrade-list"></div>
+    </div>
+    <div class="tab-panel" data-panel="abilities" hidden>
+      <p class="screen-sub ability-hint">Разблокировка — активка сможет выпасть в забеге. «На старт» — начинать забег с ней уже взятой (максимум одна).</p>
+      <div id="hangar-abilities" class="upgrade-list"></div>
+    </div>
+
+    <footer class="hangar-foot">
+      <button id="btn-hangar-back" class="btn btn-primary">НАЗАД</button>
+      <button id="btn-wipe" class="btn btn-danger">СБРОСИТЬ ПРОГРЕСС</button>
+    </footer>
+  </div>
+</section>
+
+<!-- ─────────────── Подтверждение станции ─────────────── -->
+<section id="screen-station-confirm" class="screen station-confirm" hidden>
+  <div class="station-confirm-panel">
+    <div class="station-signal-icon" aria-hidden="true"><i></i><b></b></div>
+    <p class="station-kicker">НЕИЗВЕСТНЫЙ АВАРИЙНЫЙ СИГНАЛ</p>
+    <h2>АКТИВИРОВАТЬ СТАНЦИЮ?</h2>
+    <p id="station-confirm-location" class="station-location"></p>
+    <p class="station-warning">После запуска силовое кольцо закроется.<br><b>Выхода нет: только зачистка или гибель.</b></p>
+    <div class="station-contract">
+      <span>УСИЛЕННАЯ ВОЛНА</span>
+      <span>НАГРАДА ×3</span>
+      <span>3 БАЗОВЫХ СТАТА НА ВЫБОР</span>
+    </div>
+    <div class="menu-buttons">
+      <button id="btn-station-activate" class="btn btn-danger">АКТИВИРОВАТЬ <kbd>Enter</kbd></button>
+      <button id="btn-station-decline" class="btn btn-ghost">ОТОЙТИ <kbd>Esc</kbd></button>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────── Выбор карточки ─────────────── -->
+<section id="screen-cards" class="screen screen-cards" hidden>
+  <div class="screen-inner">
+    <h2 id="cards-title">УРОВЕНЬ 2</h2>
+    <p id="cards-subtitle" class="screen-sub">выбери модуль</p>
+    <div id="cards-list" class="cards"></div>
+    <button id="btn-reroll" class="btn btn-ghost" hidden>ПЕРЕБРОС</button>
+  </div>
+</section>
+
+<!-- ─────────────── Замена ствола (слоты заняты) ─────────────── -->
+<section id="screen-weapon-swap" class="screen screen-cards" hidden>
+  <div class="screen-inner">
+    <h2>НОВЫЙ СТВОЛ: <span id="swap-incoming"></span></h2>
+    <p class="screen-sub">все 3 слота заняты — выбери, какой ствол уступит место</p>
+    <div id="swap-list" class="cards"></div>
+    <button id="btn-keep-weapons" class="btn btn-ghost">ОСТАВИТЬ КАК ЕСТЬ <kbd>4</kbd></button>
+  </div>
+</section>
+
+<!-- ─────────────── Все семь пали: выбор эндгейма ─────────────── -->
+<section id="screen-victory" class="screen" hidden>
+  <div class="screen-inner">
+    <h2 class="over-title">ВСЕ СЕМЬ ПАЛИ</h2>
+    <div id="victory-summary" class="stat-grid wide"></div>
+    <div class="victory-choices">
+      <button id="btn-victory-hangar" class="victory-card">
+        <h3>ВЕРНУТЬСЯ В АНГАР</h3>
+        <p>Забег засчитан как победа.<br>Обломки ×1.5 бонусом.</p>
+      </button>
+      <button id="btn-victory-endless" class="victory-card victory-card-danger">
+        <h3>ГЛУБЖЕ</h3>
+        <p>Бесконечные волны.<br>Обломки за победу начислены сразу,<br>но выхода больше нет.</p>
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────── Пауза ─────────────── -->
+<section id="screen-pause" class="screen" hidden>
+  <div class="screen-inner">
+    <h2 class="pause-title">ПАУЗА</h2>
+    <div class="menu-buttons">
+      <button id="btn-resume" class="btn btn-primary">ПРОДОЛЖИТЬ</button>
+      <button id="btn-quit" class="btn">ВЫЙТИ В МЕНЮ</button>
+    </div>
+    <p class="screen-note">Выход засчитает забег: обломки останутся в ангаре.</p>
+  </div>
+</section>
+
+<!-- ─────────────── Итоги ─────────────── -->
+<section id="screen-over" class="screen" hidden>
+  <div class="screen-inner">
+    <h2 id="over-title" class="over-title">КОРАБЛЬ УНИЧТОЖЕН</h2>
+    <div id="over-summary" class="stat-grid wide"></div>
+    <div id="over-total" class="over-total"></div>
+    <div class="menu-buttons">
+      <button id="btn-again" class="btn btn-primary">ЕЩЁ РАЗ</button>
+      <button id="btn-over-hangar" class="btn">В АНГАР</button>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────── Тестовый режим (` — открыть/закрыть) ─────────────── -->
+<div id="dev-panel" class="dev-panel" hidden>
+  <header class="dev-head">
+    <span>ТЕСТОВЫЙ РЕЖИМ</span>
+    <span class="dev-hint">` — закрыть · мир не останавливается</span>
+  </header>
+
+  <div class="dev-section">
+    <h4>СТВОЛЫ — клик выдаёт и сразу переключает</h4>
+    <div id="dev-weapons" class="dev-grid"></div>
+  </div>
+
+  <div class="dev-section">
+    <h4>КОРАБЛИ — клик перезапускает забег этим кораблём</h4>
+    <div id="dev-ships" class="dev-grid"></div>
+  </div>
+
+  <div class="dev-section">
+    <h4>ПРОЧЕЕ</h4>
+    <div class="dev-grid">
+      <button class="dev-btn" data-action="scrap">+5000 ОБЛОМКОВ</button>
+      <button class="dev-btn" data-action="xp">+1000 ОПЫТА</button>
+      <button class="dev-btn" data-action="boss">СЛЕДУЮЩИЙ БОСС</button>
+      <button class="dev-btn" data-action="heal">ПОЛНЫЙ РЕМОНТ</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
