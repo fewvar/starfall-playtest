@@ -2,7 +2,7 @@ import { angLerp, lerp, rnd, TAU } from '../core/math.js';
 import { DAMAGE_TYPE } from '../core/damage.js';
 import { damageEnemy, hurtPlayer, killEnemy, splitAsteroid } from '../systems/combat.js';
 import { shootAtPlayer, spawnFoeBullet } from './projectiles.js';
-import { updateBoss } from './bosses.js';
+import { updateBoss } from './bosses.js?v=818be63';
 import { getWeapon } from '../data/weapons.js';
 
 const PHYSICAL_DAMAGE = { type: DAMAGE_TYPE.PHYSICAL, penetration: 0, fromEffect: false };

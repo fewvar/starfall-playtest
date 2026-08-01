@@ -15,8 +15,14 @@ const moveLine = (line, dx, dy) => {
 };
 
 function moveBossMemory(enemy, dx, dy) {
-  for (const key of ['rockAt', 'ringAt', 'zapAt', 'blinkTo']) movePoint(enemy[key], dx, dy);
+  for (const key of [
+    'rockAt', 'ringAt', 'zapAt', 'blinkTo', 'seedRingAt', 'acidAt',
+    'beaconBlinkTo', 'crossAt',
+  ]) movePoint(enemy[key], dx, dy);
+  moveLine(enemy.pulseLine, dx, dy);
+  for (const line of enemy.crossLines ?? []) moveLine(line, dx, dy);
   for (const node of enemy.nodes ?? []) movePoint(node, dx, dy);
+  for (const pool of enemy.acidPools ?? []) movePoint(pool, dx, dy);
 }
 
 function moveDecor(decor, dx, dy) {

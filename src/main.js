@@ -6,19 +6,19 @@ import { profiler } from './core/profiler.js';
 
 import { clamp, fmt } from './core/math.js';
 import { createWorld, updateWorld, updateAsteroids } from './world/world.js';
-import { wrapActiveSimulation } from './world/wrap.js';
+import { wrapActiveSimulation } from './world/wrap.js?v=818be63';
 import { createPlayer, updatePlayerMovement, tryDash, selectWeapon, cycleWeapon, currentWeapon, fireInterval } from './entities/player.js';
 import { clearWaypointOnArrival } from './systems/navigation.js';
 import { getWeapon } from './data/weapons.js';
 import { createEffects, updateEffects, clearEffects } from './entities/effects.js';
 import { createProjectiles, updateProjectiles, fireWeapon, clearProjectiles } from './entities/projectiles.js';
-import { updateEnemies } from './entities/enemies.js';
+import { updateEnemies } from './entities/enemies.js?v=818be63';
 import { updatePickups } from './entities/pickups.js';
 import { createTurretState, updateTurrets, clearTurrets } from './entities/turrets.js';
 import { createTelegraphState, updateTelegraphs, clearTelegraphs } from './entities/telegraphs.js';
 
 import { resolveAsteroidHits, hurtPlayer } from './systems/combat.js';
-import { createRun, initWaves, startBiomeWave, updateWaves, nextWave, startBreather, skipBreather, refreshRemaining, BOSS_EVERY } from './systems/waves.js';
+import { createRun, initWaves, startBiomeWave, updateWaves, nextWave, startBreather, skipBreather, refreshRemaining, BOSS_EVERY } from './systems/waves.js?v=818be63';
 import { initProgression, offerLevelUpgrades, offerWaveRewards, applyUpgrade, needsWeaponSwap } from './systems/progression.js';
 import { meta, initMeta } from './systems/meta.js';
 import { discoverContent, initBestiary } from './systems/bestiary.js';
@@ -32,16 +32,16 @@ import {
   initStationRun,
   updateStations,
 } from './systems/stations.js';
-import { initMapScreen, showMap, hideMap, isMapOpen } from './ui/mapscreen.js?v=00679d0';
-import { hideRunMenu, initRunMenu, isRunMenuOpen, showRunMenu } from './ui/runmenu.js?v=00679d0';
+import { initMapScreen, showMap, hideMap, isMapOpen } from './ui/mapscreen.js?v=818be63';
+import { hideRunMenu, initRunMenu, isRunMenuOpen, showRunMenu } from './ui/runmenu.js?v=818be63';
 import { updateEffectSystems, useAbility, fireHook, stackBonus, grantAbility } from './systems/effects.js';
 import { createAbilityEntities, updateAbilityEntities, abilityById } from './data/abilities.js';
 import { cardById } from './data/perks.js';
 
-import { renderScene, renderMenuBackdrop } from './render/renderer.js';
+import { renderScene, renderMenuBackdrop } from './render/renderer.js?v=818be63';
 import { initHud, updateHud, resetHudCache } from './render/hud.js';
 import { initScreens, showMenu, showHangar, showPause, hideScreens, showCards, showStationConfirm, showWeaponSwap, showVictoryChoice, showGameOver, toast, hideToast, anyScreenOpen } from './ui/screens.js';
-import { renderStats } from './ui/stats.js?v=00679d0';
+import { renderStats } from './ui/stats.js?v=818be63';
 import { initDevPanel } from './ui/devpanel.js';
 
 /**
@@ -163,11 +163,11 @@ function endRun(victory = false) {
   setTimeout(() => showGameOver(summary), 800);
 }
 
-/** Бонус к обломкам за победу над всеми семью. */
+/** Бонус к обломкам за победу над всеми десятью. */
 const VICTORY_SCRAP_MUL = 1.5;
 
 /**
- * Все семь боссов пали. Забег не обрывается: показываем выбор.
+ * Все десять боссов пали. Забег не обрывается: показываем выбор.
  * «В ангар» — победа с бонусом; «Глубже» — бесконечный режим, причём обломки
  * за победу начисляются СРАЗУ, чтобы риск не наказывал за любопытство.
  */

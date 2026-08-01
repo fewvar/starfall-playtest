@@ -3,7 +3,7 @@ import { sfx } from '../core/audio.js';
 import { camera } from '../core/camera.js';
 import { rnd, TAU, shuffle } from '../core/math.js';
 import { availableEnemies, getEnemy } from '../data/enemies.js';
-import { bossForWave, bossForLocation, BOSS_ORDER, BOSSES, bossSpeedReward } from '../data/bosses.js';
+import { bossForWave, bossForLocation, BOSS_ORDER, BOSSES, bossSpeedReward } from '../data/bosses.js?v=818be63';
 import { makeEnemy, makeBoss, makePickup } from '../entities/factory.js';
 import { fireHook, counters } from './effects.js';
 import { getLocation, LOCATION_ORDER } from '../data/locations.js';
@@ -116,7 +116,7 @@ export function createRun() {
     victoryWave: null,
     bossReward: null,                            // итог награды за скорость последнего босса
     guaranteedEpic: false,                       // быстрый убой босса → эпик в следующей награде
-    endless: false,                               // бесконечный режим после седьмого босса
+    endless: false,                               // бесконечный режим после десятого босса
     endlessLap: 0,                               // круг ротации боссов в бесконечном режиме
     score: 0,
     kills: 0,
@@ -552,7 +552,7 @@ function onBossKilled(game, boss) {
 
   emit('boss:defeated', { boss, def, reward });
 
-  // все семь пали — забег не обрывается, показывается выбор (эндгейм)
+  // все десять пали — забег не обрывается, показывается выбор (эндгейм)
   if (!run.endless && run.bossesKilled.length >= BOSS_ORDER.length) {
     emit('run:allBosses', { run });
   }

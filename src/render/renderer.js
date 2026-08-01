@@ -3,8 +3,8 @@ import { camera } from '../core/camera.js';
 import { drawStarfield } from '../world/starfield.js';
 import { CHUNK } from '../world/world.js';
 import { getWeapon } from '../data/weapons.js';
-import { BOSSES } from '../data/bosses.js';
-import { activeBoss } from '../entities/bosses.js';
+import { BOSSES } from '../data/bosses.js?v=818be63';
+import { activeBoss } from '../entities/bosses.js?v=818be63';
 import { getLocation, paletteFor } from '../data/locations.js';
 import { silhouetteFor, shipSilhouetteFor, TRAIL_LENGTH } from './silhouettes.js';
 import { formatNavigationDistance } from '../systems/navigation.js';
@@ -74,6 +74,7 @@ export function renderScene(ctx, game, W, H) {
   drawStationArena(ctx, game);
   drawWorldStations(ctx, game, visible);
   drawLocationSpecials(ctx, game, visible);
+  drawBossHazards(ctx, game);
 
   for (const a of entities.asteroids) if (visible(a, a.r)) drawAsteroid(ctx, a, game.time, game.run.location === 'dissonance');
   drawSingularities(ctx, game);
@@ -965,6 +966,28 @@ function drawTelegraphs(ctx, game) {
   ctx.restore();
 }
 
+/** Временные зоны принадлежат боссу, но рисуются независимо от его видимости. */
+function drawBossHazards(ctx, game) {
+  const core = activeBoss(game);
+  if (core?.boss !== 'corrosion_core' || !core.acidPools?.length) return;
+  ctx.save();
+  for (const pool of core.acidPools) {
+    const fade = clamp(pool.life / Math.min(1.2, pool.max), 0, 1);
+    const pulse = 1 + Math.sin(game.time * 4.6 + pool.x * 0.01) * 0.035;
+    ctx.globalAlpha = (0.16 + 0.18 * fade) * clamp(pool.life / 0.6, 0, 1);
+    ctx.fillStyle = '#8dbb35';
+    ctx.strokeStyle = '#d9ff72';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(pool.x, pool.y, pool.r * pulse, 0, TAU);
+    ctx.fill();
+    ctx.setLineDash([12, 9]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.restore();
+}
+
 function drawEnemy(ctx, e) {
   if (e.boss) return drawBoss(ctx, e);
 
@@ -1103,7 +1126,8 @@ const CORE_TINT = {
   '#b06bff': '#e0ccff', '#ffe066': '#fff6cc', '#ff9f43': '#ffdcb0',
   '#e879f9': '#f8d4ff', '#4ad9ff': '#cdf3ff', '#ff4a4a': '#ffc4c4',
   '#c9955a': '#f0d8bc', '#8a7ad0': '#ddd6f5', '#d4c05a': '#f2ead0',
-  '#7ee8ff': '#dffaff', '#ff6ba0': '#ffd2e2',
+  '#7ee8ff': '#dffaff', '#ff6ba0': '#ffd2e2', '#64f0af': '#d8ffeb',
+  '#b8e35b': '#efffb8', '#ff79c6': '#ffd6ef',
 };
 
 function drawBoss(ctx, b) {
@@ -1223,6 +1247,26 @@ function drawBoss(ctx, b) {
     ctx.beginPath();
     ctx.arc(r * 0.28, 0, r * 0.42, 0, TAU);
     ctx.fill();
+  } else if (b.boss === 'rootmind') {
+    // Пятилистное живое ядро: от корпуса расходятся гибкие корни-щупальца.
+    ctx.rotate(-b.angle + b.spin * 0.2);
+    ctx.fillStyle = body;
+    for (let i = 0; i < 5; i++) {
+      ctx.save();
+      ctx.rotate(i * TAU / 5 + Math.sin(b.wobble * 2 + i) * 0.08);
+      ctx.beginPath();
+      ctx.moveTo(r * 0.15, -r * 0.22);
+      ctx.quadraticCurveTo(r * 0.85, -r * 0.5, r * 1.35, 0);
+      ctx.quadraticCurveTo(r * 0.8, r * 0.34, r * 0.12, r * 0.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    poly(ctx, 0, 0, r * 0.64, 5, -b.spin * 0.45, '#102a22', body);
+    ctx.fillStyle = coreTint(def.color);
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.22 * (1 + 0.14 * Math.sin(b.wobble * 5)), 0, TAU);
+    ctx.fill();
   } else if (b.boss === 'gravedigger') {
     // тяжёлый ковш: широкий тупой корпус, читается как «поднимает обломки»
     ctx.fillStyle = body;
@@ -1243,6 +1287,30 @@ function drawBoss(ctx, b) {
     ctx.moveTo(-r * 0.5, -r * 0.45); ctx.lineTo(r * 0.6, -r * 0.2);
     ctx.moveTo(-r * 0.5, r * 0.45); ctx.lineTo(r * 0.6, r * 0.2);
     ctx.stroke();
+  } else if (b.boss === 'corrosion_core') {
+    // Реактор-капля: несколько оболочек будто растворяются наружу.
+    ctx.rotate(-b.angle);
+    ctx.fillStyle = '#15200d';
+    ctx.strokeStyle = body;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 1.1);
+    ctx.bezierCurveTo(r * 0.95, -r * 0.45, r * 0.9, r * 0.75, 0, r);
+    ctx.bezierCurveTo(-r * 0.9, r * 0.75, -r * 0.95, -r * 0.45, 0, -r * 1.1);
+    ctx.fill();
+    ctx.stroke();
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.arc(0, 0, r * (0.72 + i * 0.24), b.spin + i, b.spin + i + 3.9);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = coreTint(def.color);
+    ctx.beginPath();
+    ctx.arc(0, r * 0.05, r * 0.28 * (1 + 0.12 * Math.sin(b.wobble * 7)), 0, TAU);
+    ctx.fill();
   } else if (b.boss === 'conduit') {
     // ядро в клетке из дуг — «источник разрядов»
     poly(ctx, 0, 0, r, 3, b.spin * 1.4, body, null);
@@ -1253,6 +1321,32 @@ function drawBoss(ctx, b) {
     ctx.fillStyle = '#dffaff';
     ctx.beginPath();
     ctx.arc(0, 0, r * 0.3 * (1 + 0.15 * Math.sin(b.wobble * 8)), 0, TAU);
+    ctx.fill();
+  } else if (b.boss === 'false_beacon') {
+    // Четыре антенны и смещённый полупрозрачный дубль создают диссонанс,
+    // но опасные линии атак остаются геометрически точными.
+    ctx.rotate(-b.angle + b.spin * 0.35);
+    ctx.fillStyle = body;
+    for (let i = 0; i < 4; i++) {
+      ctx.save();
+      ctx.rotate(i * Math.PI / 2);
+      ctx.beginPath();
+      ctx.moveTo(r * 0.18, -r * 0.18);
+      ctx.lineTo(r * 1.35, -r * 0.38);
+      ctx.lineTo(r * 0.9, 0);
+      ctx.lineTo(r * 1.35, r * 0.38);
+      ctx.lineTo(r * 0.18, r * 0.18);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 0.28;
+    poly(ctx, Math.sin(b.wobble * 3) * 12, Math.cos(b.wobble * 2.3) * 9, r * 0.9, 4, -b.spin, body, null);
+    ctx.globalAlpha = 1;
+    poly(ctx, 0, 0, r * 0.45, 4, b.spin, '#160b18', body);
+    ctx.fillStyle = coreTint(def.color);
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.18, 0, TAU);
     ctx.fill();
   } else if (b.boss === 'distortion') {
     // силуэт корабля игрока, вывернутый наизнанку: два встречных клина

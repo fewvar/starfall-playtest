@@ -68,7 +68,7 @@ export const defaultSave = () => ({
     kills: 0,
     bosses: 0,
     totalScrap: 0,
-    wins: 0,           // забегов, где пали все семь боссов
+    wins: 0,           // забегов, где пали все десять боссов
     bestEndless: 0,    // лучшая волна в бесконечном режиме
   },
 });

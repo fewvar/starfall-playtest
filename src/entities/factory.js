@@ -58,7 +58,7 @@ export function makeBoss(typeId, x, y, scale = 1) {
   const def = BOSSES[typeId];
   const hp = Math.round(def.hp * scale);
   // урон подтягивается к ступени босса, а не к его HP напрямую: рост HP
-  // между первым и седьмым боссом сорокакратный, урон так расти не должен
+  // между первым и десятым боссом многократный, урон так расти не должен
   const damage = Math.round(20 + def.order * 6) * scale;
   return {
     kind: 'enemy',

@@ -30,6 +30,8 @@ import { currentWeapon } from './player.js';
 const MINION_LIMIT = 26;
 const PRIME_RAM_DISTANCE = 900;
 const PRIME_RAM_SPEED_MUL = 3.4;
+const ROOT_RAM_DISTANCE = 620;
+const ROOT_RAM_SPEED_MUL = 3;
 const PHYSICAL_DAMAGE = { type: DAMAGE_TYPE.PHYSICAL, penetration: 0, fromEffect: false };
 const TECHNICAL_DAMAGE = { type: DAMAGE_TYPE.TECHNICAL, penetration: 0, fromEffect: false };
 
@@ -44,8 +46,17 @@ const TELE = {
   grid: 1.0,        // сеть между узлами
   blink: 0.6,       // телепорт «Искажения»
   burst: 0.8,       // круговой залп «Ока»
+  rootRam: 0.8,     // рывок «Корнеразума»
+  vines: 1.1,       // сектора лиан
+  seeds: 0.9,       // кольцо семян
   grave: 0.7,       // веер «Могильщика»
+  acidPool: 0.9,    // кислотное пятно
+  acidSpray: 1.2,   // веер кислоты
+  acidRing: 1.0,    // расширяющееся кольцо
   brood: 1.0,       // выводок «Матки»
+  pulse: 0.7,       // импульс «Ложного маяка»
+  beaconBlink: 0.8, // скачок маяка
+  cross: 1.3,       // крестовой залп
 };
 
 export function updateBoss(game, b, dt) {
@@ -99,9 +110,12 @@ export function updateBoss(game, b, dt) {
     case 'dread':      updateDread(game, b, def, dt, approach, toPlayer); break;
     case 'prime':      updatePrime(game, b, def, dt, nx, ny, dist, toPlayer); break;
     case 'eye':        updateEye(game, b, def, dt, approach, dist, toPlayer); break;
+    case 'rootmind':   updateRootmind(game, b, def, dt, approach, toPlayer); break;
     case 'gravedigger':updateGravedigger(game, b, def, dt, approach, toPlayer); break;
+    case 'corrosion_core': updateCorrosionCore(game, b, def, dt, approach, toPlayer); break;
     case 'conduit':    updateConduit(game, b, def, dt, approach, toPlayer); break;
     case 'hive':       updateHive(game, b, def, dt, approach); break;
+    case 'false_beacon': updateFalseBeacon(game, b, def, dt, approach, toPlayer); break;
     case 'distortion': updateDistortion(game, b, def, dt, approach, toPlayer); break;
   }
 
@@ -353,6 +367,102 @@ function updateEye(game, b, def, dt, approach, dist, toPlayer) {
   }
 }
 
+// ─────────────────────────────── КОРНЕРАЗУМ (заросли)
+// Ф1 фиксированный рывок · Ф2 + сектора лиан · Ф3 + кольцо живых семян
+
+function updateRootmind(game, b, def, dt, approach, toPlayer) {
+  b.cd -= dt;
+  if (b.rootDash > 0) {
+    b.rootDash = Math.max(0, b.rootDash - dt);
+    b.vx = b.rootNx * b.speed * ROOT_RAM_SPEED_MUL;
+    b.vy = b.rootNy * b.speed * ROOT_RAM_SPEED_MUL;
+  } else if (b.rootCharge > 0) {
+    b.rootCharge -= dt;
+    b.vx *= 0.97;
+    b.vy *= 0.97;
+    if (b.rootCharge <= 0) {
+      b.rootDash = ROOT_RAM_DISTANCE / (b.speed * ROOT_RAM_SPEED_MUL);
+      sfx.dash();
+      camera.shake(6);
+    }
+  } else if (b.cd <= 0) {
+    b.cd = b.phase >= 2 ? 3.2 : 4.1;
+    b.rootCharge = TELE.rootRam;
+    b.rootNx = Math.cos(toPlayer);
+    b.rootNy = Math.sin(toPlayer);
+    b.vx *= 0.2;
+    b.vy *= 0.2;
+    telegraph(game, {
+      kind: 'line', width: b.r * 1.35, life: TELE.rootRam, color: def.color,
+      x1: b.x, y1: b.y,
+      x2: b.x + b.rootNx * ROOT_RAM_DISTANCE,
+      y2: b.y + b.rootNy * ROOT_RAM_DISTANCE,
+    });
+  } else {
+    approach(330, 1.35);
+  }
+
+  // Два отмеченных сектора оставляют между собой честные коридоры. Лианы
+  // материализуются снарядами только после исчезновения подсветки.
+  if (b.phase >= 2) {
+    b.cd2 -= dt;
+    if (b.cd2 <= 0 && !b.vineCharge) {
+      b.vineCharge = true;
+      b.cd2 = TELE.vines;
+      b.vineAngle = toPlayer;
+      for (const side of [-1, 1]) {
+        telegraph(game, {
+          kind: 'cone', x: b.x, y: b.y, r: 620,
+          angle: b.vineAngle + side * 1.08, arc: 0.72,
+          life: TELE.vines, color: def.color,
+        });
+      }
+    } else if (b.vineCharge && b.cd2 <= 0) {
+      b.vineCharge = false;
+      b.cd2 = b.phase >= 3 ? 4.2 : 5.4;
+      for (const side of [-1, 1]) {
+        const center = b.vineAngle + side * 1.08;
+        for (let i = -3; i <= 3; i++) {
+          spawnFoeBullet(game, b, center + i * 0.1, 310, b.damage * 0.42, def.color, 5, PHYSICAL_DAMAGE);
+        }
+      }
+      sfx.enemyShot();
+    }
+  }
+
+  // Кольцо не наносит мгновенный урон: после телеграфа на нём вырастают
+  // разрушаемые семена-мины. Центр остаётся свободным, а кольцо можно пробить.
+  if (b.phase >= 3) {
+    b.cd3 -= dt;
+    if (b.cd3 <= 0 && !b.seedRingAt) {
+      b.cd3 = TELE.seeds;
+      b.seedRingAt = { x: game.player.x, y: game.player.y };
+      telegraph(game, {
+        kind: 'ring', x: b.seedRingAt.x, y: b.seedRingAt.y,
+        r: 390, r2: 330, life: TELE.seeds, color: def.color,
+      });
+    } else if (b.seedRingAt && b.cd3 <= 0) {
+      const count = 10;
+      for (let i = 0; i < count; i++) {
+        const angle = i * TAU / count;
+        const seed = spawnOwnedMinionAt(
+          game, b,
+          b.seedRingAt.x + Math.cos(angle) * 360,
+          b.seedRingAt.y + Math.sin(angle) * 360,
+          'mine',
+        );
+        if (seed) {
+          seed.hp = seed.maxHp = Math.round(34 + b.damage * 0.35);
+          seed.color = def.color;
+        }
+      }
+      b.seedRingAt = null;
+      b.cd3 = 9;
+      sfx.alarm();
+    }
+  }
+}
+
 // ─────────────────────────────── МОГИЛЬЩИК (кладбище)
 // Ф1 щит из обломков · Ф2 + собирает мёртвых · Ф3 + взрыв щита при потере
 
@@ -406,6 +516,86 @@ function updateGravedigger(game, b, def, dt, approach, toPlayer) {
       b.cd3 = 6;
       for (let i = 0; i < 3; i++) spawnMinion(game, b, Math.random() < 0.5 ? 'drone' : 'gunner');
       floatText(game.fx, b.x, b.y - b.r - 12, 'ПОДЪЁМ', def.color);
+    }
+  }
+}
+
+// ─────────────────────────────── ЯДРО КОРРОЗИИ (кислотное облако)
+// Ф1 кислотные пятна · Ф2 + веер струй · Ф3 + расширяющееся кольцо
+
+function updateCorrosionCore(game, b, def, dt, approach, toPlayer) {
+  approach(380, 1.15);
+  b.acidPools ??= [];
+
+  // Пятна принадлежат самому боссу: уход из биома удаляет босса и сразу
+  // убирает все его временные угрозы, не оставляя невидимого урона позади.
+  for (let i = b.acidPools.length - 1; i >= 0; i--) {
+    const pool = b.acidPools[i];
+    pool.life -= dt;
+    if (pool.life <= 0) {
+      b.acidPools.splice(i, 1);
+      continue;
+    }
+    const distance = Math.hypot(game.player.x - pool.x, game.player.y - pool.y);
+    if (distance < pool.r + game.player.r) {
+      hurtPlayer(game, b.damage * 0.22 * dt, { ...TECHNICAL_DAMAGE, continuous: true });
+    }
+  }
+
+  b.cd -= dt;
+  if (b.cd <= 0 && !b.acidAt) {
+    b.cd = TELE.acidPool;
+    b.acidAt = {
+      x: game.player.x + game.player.vx * 0.35,
+      y: game.player.y + game.player.vy * 0.35,
+    };
+    telegraph(game, { kind: 'circle', x: b.acidAt.x, y: b.acidAt.y, r: 135, life: TELE.acidPool, color: def.color });
+  } else if (b.acidAt && b.cd <= 0) {
+    b.acidPools.push({ ...b.acidAt, r: 135, life: 5.5, max: 5.5 });
+    if (b.acidPools.length > 4) b.acidPools.shift();
+    blastRing(game.fx, b.acidAt.x, b.acidAt.y, 135, def.color);
+    b.acidAt = null;
+    b.cd = b.phase >= 2 ? 2.8 : 3.8;
+    sfx.confirm();
+  }
+
+  if (b.phase >= 2) {
+    b.cd2 -= dt;
+    if (b.cd2 <= 0 && !b.acidSpray) {
+      b.acidSpray = true;
+      b.cd2 = TELE.acidSpray;
+      b.acidSprayAngle = toPlayer;
+      telegraph(game, {
+        kind: 'cone', x: b.x, y: b.y, r: 680,
+        angle: b.acidSprayAngle, arc: 1.35,
+        life: TELE.acidSpray, color: def.color,
+      });
+    } else if (b.acidSpray && b.cd2 <= 0) {
+      b.acidSpray = false;
+      b.cd2 = b.phase >= 3 ? 3.8 : 5;
+      for (let i = -6; i <= 6; i++) {
+        spawnFoeBullet(game, b, b.acidSprayAngle + i * 0.1, 285, b.damage * 0.44, def.color, 5, TECHNICAL_DAMAGE);
+      }
+      sfx.enemyShot();
+    }
+  }
+
+  if (b.phase >= 3) {
+    b.cd3 -= dt;
+    if (b.cd3 <= 0 && !b.acidRingCharge) {
+      b.acidRingCharge = true;
+      b.cd3 = TELE.acidRing;
+      b.acidRingAngle = b.spin;
+      telegraph(game, { kind: 'ring', x: b.x, y: b.y, r: 90, r2: 470, life: TELE.acidRing, color: def.color });
+    } else if (b.acidRingCharge && b.cd3 <= 0) {
+      b.acidRingCharge = false;
+      b.cd3 = 8.5;
+      const count = 26;
+      for (let i = 0; i < count; i++) {
+        spawnFoeBullet(game, b, b.acidRingAngle + i * TAU / count, 250, b.damage * 0.4, def.color, 5, TECHNICAL_DAMAGE);
+      }
+      sfx.bigBoom();
+      camera.shake(8);
     }
   }
 }
@@ -543,6 +733,97 @@ function splitHive(game, b) {
   camera.shake(18);
 }
 
+// ─────────────────────────────── ЛОЖНЫЙ МАЯК (диссонанс)
+// Ф1 импульсная линия · Ф2 + отмеченный скачок · Ф3 + крестовой залп
+
+function updateFalseBeacon(game, b, def, dt, approach, toPlayer) {
+  approach(390, 1.45);
+
+  // Даже в локации, где врёт presentation-слой, боевая геометрия остаётся
+  // правдивой: линия фиксируется один раз и удар проходит строго по ней.
+  b.cd -= dt;
+  if (b.cd <= 0 && !b.pulseLine) {
+    b.cd = TELE.pulse;
+    const nx = Math.cos(toPlayer);
+    const ny = Math.sin(toPlayer);
+    b.pulseLine = { x1: b.x, y1: b.y, x2: b.x + nx * 1200, y2: b.y + ny * 1200 };
+    telegraph(game, { kind: 'line', width: 38, life: TELE.pulse, color: def.color, ...b.pulseLine });
+  } else if (b.pulseLine && b.cd <= 0) {
+    strikeLine(game, b, b.pulseLine, 38, 1.05, def.color);
+    b.pulseLine = null;
+    b.cd = b.phase >= 2 ? 2.1 : 2.8;
+  }
+
+  if (b.phase >= 2) {
+    b.cd2 -= dt;
+    if (b.cd2 <= 0 && !b.beaconBlinkTo) {
+      b.cd2 = TELE.beaconBlink;
+      const angle = rnd(TAU);
+      b.beaconBlinkTo = {
+        x: game.player.x + Math.cos(angle) * 300,
+        y: game.player.y + Math.sin(angle) * 300,
+      };
+      telegraph(game, {
+        kind: 'circle', x: b.beaconBlinkTo.x, y: b.beaconBlinkTo.y,
+        r: b.r * 1.65, life: TELE.beaconBlink, color: def.color,
+      });
+    } else if (b.beaconBlinkTo && b.cd2 <= 0) {
+      spark(game.fx, b.x, b.y, 14, def.color, 220, 0.45, 2.2);
+      b.x = b.beaconBlinkTo.x;
+      b.y = b.beaconBlinkTo.y;
+      b.beaconBlinkTo = null;
+      b.cd2 = b.phase >= 3 ? 3.6 : 4.8;
+      for (let i = 0; i < 12; i++) {
+        spawnFoeBullet(game, b, b.spin + i * TAU / 12, 290, b.damage * 0.38, def.color, 4, TECHNICAL_DAMAGE);
+      }
+      spark(game.fx, b.x, b.y, 18, def.color, 260, 0.5, 2.4);
+      sfx.dash();
+    }
+  }
+
+  if (b.phase >= 3) {
+    b.cd3 -= dt;
+    if (b.cd3 <= 0 && !b.crossAt) {
+      b.cd3 = TELE.cross;
+      b.crossAt = { x: game.player.x, y: game.player.y, angle: b.spin * 0.37 };
+      b.crossLines = crossLinesAt(b.crossAt, 650);
+      for (const line of b.crossLines) {
+        telegraph(game, { kind: 'line', width: 42, life: TELE.cross, color: def.color, ...line });
+      }
+    } else if (b.crossAt && b.cd3 <= 0) {
+      let hit = false;
+      for (const line of b.crossLines) {
+        hit = strikeLine(game, b, line, 42, 1.35, def.color, hit) || hit;
+      }
+      b.crossAt = null;
+      b.crossLines = null;
+      b.cd3 = 8;
+      sfx.bigBoom();
+      camera.shake(9);
+    }
+  }
+}
+
+function crossLinesAt({ x, y, angle }, halfLength) {
+  return [0, Math.PI / 2].map((offset) => {
+    const a = angle + offset;
+    const dx = Math.cos(a) * halfLength;
+    const dy = Math.sin(a) * halfLength;
+    return { x1: x - dx, y1: y - dy, x2: x + dx, y2: y + dy };
+  });
+}
+
+/** Удар по уже показанной линии. suppressDamage не даёт кресту ударить дважды. */
+function strikeLine(game, boss, line, width, damageMul, color, suppressDamage = false) {
+  game.fx.beams.push({ ...line, color, width: 4, life: 0.2, max: 0.2 });
+  const hit = distToSegment(
+    game.player.x, game.player.y,
+    line.x1, line.y1, line.x2, line.y2,
+  ) < width + game.player.r;
+  if (hit && !suppressDamage) hurtPlayer(game, boss.damage * damageMul, TECHNICAL_DAMAGE);
+  return hit;
+}
+
 // ─────────────────────────────── ИСКАЖЕНИЕ (разлом)
 // Ф1 зеркалит ствол · Ф2 + телепорты · Ф3 + копия игрока
 
@@ -613,23 +894,30 @@ function spawnClone(game, b) {
   camera.shake(16);
 }
 
-function spawnMinion(game, boss, type) {
+function spawnOwnedMinionAt(game, boss, x, y, type) {
   const minions = game.entities.enemies.filter((e) => !e.boss).length;
-  if (minions > MINION_LIMIT) return;
-  const a = rnd(TAU);
-  const e = makeEnemy(
-    boss.x + Math.cos(a) * (boss.r + 20),
-    boss.y + Math.sin(a) * (boss.r + 20),
-    type,
-    game.run.difficulty * 0.9,
-  );
-  e.vx = Math.cos(a) * 160;
-  e.vy = Math.sin(a) * 160;
+  if (minions > MINION_LIMIT) return null;
+  const e = makeEnemy(x, y, type, game.run.difficulty * 0.9);
   e.fromWave = boss.fromWave;
   e.source = boss.source;
   e.encounterId = boss.encounterId;
   e.minion = true;
   game.entities.enemies.push(e);
+  return e;
+}
+
+function spawnMinion(game, boss, type) {
+  const a = rnd(TAU);
+  const e = spawnOwnedMinionAt(
+    game,
+    boss,
+    boss.x + Math.cos(a) * (boss.r + 20),
+    boss.y + Math.sin(a) * (boss.r + 20),
+    type,
+  );
+  if (!e) return;
+  e.vx = Math.cos(a) * 160;
+  e.vy = Math.sin(a) * 160;
 }
 
 export const activeBoss = (game) => game.entities.enemies.find((e) => e.boss) || null;

@@ -1,5 +1,5 @@
 /**
- * СЕМЬ БОССОВ. Поведение — в entities/bosses.js (updateBoss, ветка по id).
+ * ДЕСЯТЬ БОССОВ. Поведение — в entities/bosses.js (updateBoss, ветка по id).
  *
  * HP ФИКСИРОВАННОЕ и от волны не зависит вообще (в отличие от обычных врагов,
  * см. systems/waves.js:enemyHpScale). В основном режиме каждый босс живёт у
@@ -37,31 +37,52 @@ export const BOSSES = {
     score: 1700, xp: 65, scrap: 55,
     hint: 'Водит лучом по кругу. Луч раздваивается, а в конце Око пропадает между атаками.',
   },
+  rootmind: {
+    id: 'rootmind', name: 'КОРНЕРАЗУМ', title: 'ЗАРОСЛИ НАУЧИЛИСЬ ОХОТИТЬСЯ',
+    location: 'grove', order: 4,
+    hp: 20500, r: 64, speed: 118, color: '#64f0af', physicalResist: 0.2, technicalResist: 0.1,
+    score: 1850, xp: 70, scrap: 60,
+    hint: 'Фиксирует рывок заранее, закрывает сектора лианами и выращивает кольцо взрывающихся семян.',
+  },
   gravedigger: {
     id: 'gravedigger', name: 'МОГИЛЬЩИК', title: 'КЛАДБИЩЕ ПОДНЯЛО СВОИ ОБЛОМКИ',
-    location: 'graveyard', order: 4,
+    location: 'graveyard', order: 5,
     hp: 25000, r: 60, speed: 92, color: '#5ef0d0', physicalResist: 0.3, technicalResist: 0.12,
     score: 2000, xp: 75, scrap: 65,
     hint: 'Прячется за щитом из обломков. Сбей щит — он взорвётся, но откроет корпус.',
   },
+  corrosion_core: {
+    id: 'corrosion_core', name: 'ЯДРО КОРРОЗИИ', title: 'ОБЛАКО СЖАЛОСЬ В ЖИВОЙ РЕАКТОР',
+    location: 'acid', order: 6,
+    hp: 29500, r: 66, speed: 92, color: '#b8e35b', physicalResist: 0.1, technicalResist: 0.35,
+    score: 2150, xp: 80, scrap: 70,
+    hint: 'Оставляет кислотные пятна, поливает сектор и выпускает расширяющиеся кольца. Держи путь отхода свободным.',
+  },
   conduit: {
     id: 'conduit', name: 'ПРОВОДНИК', title: 'ШТОРМ ОБРЁЛ ФОРМУ',
-    location: 'ionstorm', order: 5,
-    hp: 34000, r: 52, speed: 104, color: '#7ee8ff', physicalResist: 0.1, technicalResist: 0.34,
+    location: 'ionstorm', order: 7,
+    hp: 40000, r: 52, speed: 104, color: '#7ee8ff', physicalResist: 0.1, technicalResist: 0.34,
     score: 2300, xp: 85, scrap: 75,
     hint: 'Бьёт цепными разрядами и ставит узлы. Не стой на линии между узлами.',
   },
   hive: {
     id: 'hive', name: 'МАТКА РОЯ', title: 'ИНКУБАТОР ПРОСНУЛСЯ',
-    location: 'nest', order: 6,
-    hp: 47000, r: 58, speed: 70, color: '#e879f9', physicalResist: 0.16, technicalResist: 0.3,
+    location: 'nest', order: 8,
+    hp: 57000, r: 58, speed: 70, color: '#e879f9', physicalResist: 0.16, technicalResist: 0.3,
     score: 2600, xp: 95, scrap: 85,
     hint: 'Спираль снарядов и непрерывный выводок. На последней фазе делится на три.',
   },
+  false_beacon: {
+    id: 'false_beacon', name: 'ЛОЖНЫЙ МАЯК', title: 'ДИССОНАНС НАШЁЛ ТОЧКУ ОТСЧЁТА',
+    location: 'dissonance', order: 9,
+    hp: 72000, r: 58, speed: 132, color: '#ff79c6', physicalResist: 0.3, technicalResist: 0.3,
+    score: 2850, xp: 105, scrap: 95,
+    hint: 'Фиксирует линии импульсов, скачет в отмеченную точку и замыкает честный крестовой залп.',
+  },
   distortion: {
     id: 'distortion', name: 'ИСКАЖЕНИЕ', title: 'РАЗЛОМ СМОТРИТ ТВОИМ ЛИЦОМ',
-    location: 'rift', order: 7,
-    hp: 70000, r: 50, speed: 150, color: '#b06bff', physicalResist: 0.18, technicalResist: 0.38,
+    location: 'rift', order: 10,
+    hp: 90000, r: 50, speed: 150, color: '#b06bff', physicalResist: 0.18, technicalResist: 0.38,
     score: 3200, xp: 120, scrap: 110,
     hint: 'Стреляет твоим же стволом. Телепортируется, а в конце выпускает твою копию.',
   },
