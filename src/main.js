@@ -32,8 +32,8 @@ import {
   initStationRun,
   updateStations,
 } from './systems/stations.js';
-import { initMapScreen, showMap, hideMap, isMapOpen } from './ui/mapscreen.js';
-import { hideRunMenu, initRunMenu, isRunMenuOpen, showRunMenu } from './ui/runmenu.js';
+import { initMapScreen, showMap, hideMap, isMapOpen } from './ui/mapscreen.js?v=00679d0';
+import { hideRunMenu, initRunMenu, isRunMenuOpen, showRunMenu } from './ui/runmenu.js?v=00679d0';
 import { updateEffectSystems, useAbility, fireHook, stackBonus, grantAbility } from './systems/effects.js';
 import { createAbilityEntities, updateAbilityEntities, abilityById } from './data/abilities.js';
 import { cardById } from './data/perks.js';
@@ -41,7 +41,7 @@ import { cardById } from './data/perks.js';
 import { renderScene, renderMenuBackdrop } from './render/renderer.js';
 import { initHud, updateHud, resetHudCache } from './render/hud.js';
 import { initScreens, showMenu, showHangar, showPause, hideScreens, showCards, showStationConfirm, showWeaponSwap, showVictoryChoice, showGameOver, toast, hideToast, anyScreenOpen } from './ui/screens.js';
-import { renderStats } from './ui/stats.js';
+import { renderStats } from './ui/stats.js?v=00679d0';
 import { initDevPanel } from './ui/devpanel.js';
 
 /**

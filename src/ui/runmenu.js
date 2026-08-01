@@ -1,7 +1,7 @@
 import { bestiaryViewModel } from '../systems/bestiary.js';
 import { navigationCapabilities } from '../systems/location-policy.js';
-import { renderMapCanvas } from './mapscreen.js';
-import { renderStatsInto } from './stats.js';
+import { renderMapCanvas } from './mapscreen.js?v=00679d0';
+import { renderStatsInto } from './stats.js?v=00679d0';
 
 const TABS = Object.freeze([
   { id: 'map', label: 'КАРТА' },
