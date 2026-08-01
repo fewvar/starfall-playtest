@@ -21,6 +21,7 @@ import { resolveAsteroidHits, hurtPlayer } from './systems/combat.js';
 import { createRun, initWaves, startBiomeWave, updateWaves, nextWave, startBreather, skipBreather, refreshRemaining, BOSS_EVERY } from './systems/waves.js';
 import { initProgression, offerLevelUpgrades, offerWaveRewards, applyUpgrade, needsWeaponSwap } from './systems/progression.js';
 import { meta, initMeta } from './systems/meta.js';
+import { discoverContent, initBestiary } from './systems/bestiary.js';
 import { clearHullSeed, initLocations, updateLocationEffects } from './systems/locations.js';
 import { navigationCapabilities } from './systems/location-policy.js';
 import {
@@ -32,6 +33,7 @@ import {
   updateStations,
 } from './systems/stations.js';
 import { initMapScreen, showMap, hideMap, isMapOpen } from './ui/mapscreen.js';
+import { hideRunMenu, initRunMenu, isRunMenuOpen, showRunMenu } from './ui/runmenu.js';
 import { updateEffectSystems, useAbility, fireHook, stackBonus, grantAbility } from './systems/effects.js';
 import { createAbilityEntities, updateAbilityEntities, abilityById } from './data/abilities.js';
 import { cardById } from './data/perks.js';
@@ -50,6 +52,7 @@ import { initDevPanel } from './ui/devpanel.js';
  *   hangar    — ангар с покупками
  *   playing   — идёт бой
  *   paused    — пауза
+ *   runmenu   — журнал забега / бестиарий (мир заморожен)
  *   choosing  — открыт выбор карточки (мир заморожен)
  *   over      — итоги забега
  */
@@ -95,6 +98,7 @@ resize();
 function startRun() {
   resumeAudio();
   closeStats();
+  hideRunMenu();
   meta.reload();
 
   game.player = createPlayer(meta.save);
@@ -138,6 +142,7 @@ function startRun() {
 function endRun(victory = false) {
   if (game.run.over) return;
   game.run.over = true;
+  hideRunMenu();
   game.state = 'over';
   releaseAll();
 
@@ -205,6 +210,7 @@ on('run:allBosses', () => {
 
 function quitToMenu() {
   closeStats();
+  hideRunMenu();
   if (game.state === 'playing' || game.state === 'paused') {
     meta.finishRun(game.run);   // забег засчитывается, обломки не пропадают
     game.run.over = true;
@@ -243,13 +249,40 @@ function resume() {
   hideScreens();
 }
 
+function openRunMenu() {
+  if (game.state !== 'playing') return;
+  if (game.run.stationEncounter?.status === 'active') {
+    toast('КОЛЬЦО ЗАМКНУТО', 'журнал недоступен до конца зачистки', 1400);
+    return;
+  }
+  hideToast();
+  releaseAll();
+  game.state = 'runmenu';
+  showRunMenu();
+}
+
+function closeRunMenu() {
+  if (game.state !== 'runmenu' && !isRunMenuOpen()) return;
+  hideRunMenu();
+  game.state = 'playing';
+}
+
 // ─────────────────────────────── карточки
 
 let pendingLevels = 0;
 
+function discoverOffers(items) {
+  for (const item of items) {
+    if (item.weapon) discoverContent('weapons', item.weapon);
+    else if (item.ability) discoverContent('abilities', item.ability);
+    else discoverContent('perks', item.id);
+  }
+}
+
 function openLevelChoice() {
   const items = offerLevelUpgrades(game).map(decorate);
   if (!items.length) return;
+  discoverOffers(items);
   game.state = 'choosing';
   releaseAll();
   showCards({
@@ -264,6 +297,7 @@ function openLevelChoice() {
 
 function openWaveReward() {
   const items = offerWaveRewards(game).map(decorate);
+  discoverOffers(items);
   const biomeTitle = game.run.waveMode === 'biome'
     ? `ВОЛНА БИОМА ${game.run.localWave}/${game.run.waveTotal} ЗАЧИЩЕНА`
     : `ВОЛНА ${game.run.wave} ЗАЧИЩЕНА`;
@@ -444,7 +478,9 @@ configureMouse({
 
 onPress('escape', () => {
   if (isMapOpen()) { hideMap(); game.state = 'playing'; return; }
-  if (game.state === 'playing' || game.state === 'paused') togglePause();
+  if (isRunMenuOpen()) { closeRunMenu(); return; }
+  if (game.state === 'playing') openRunMenu();
+  else if (game.state === 'paused') togglePause();
   else if (game.state === 'menu') showMenu();
 });
 onPress('p', () => {
@@ -637,7 +673,7 @@ function frame(now) {
   const t0 = profiler.on ? performance.now() : 0;
 
   if (game.state === 'playing') updatePlaying(dt);
-  else if (game.state === 'choosing' || game.state === 'paused' || game.state === 'stats' || game.state === 'map') {
+  else if (game.state === 'choosing' || game.state === 'paused' || game.state === 'stats' || game.state === 'map' || game.state === 'runmenu') {
     updateEffects(game.fx, dt * 0.35);
   }
 
@@ -663,8 +699,10 @@ initHud();
 initWaves(game);
 initProgression(game);
 initMeta(game);
+initBestiary();
 initLocations(game);
 initMapScreen(game);
+initRunMenu({ onResume: closeRunMenu });
 initScreens({
   startRun,
   resume,

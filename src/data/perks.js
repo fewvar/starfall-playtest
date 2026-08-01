@@ -1,13 +1,14 @@
 import { TAU, clamp } from '../core/math.js';
+import { DAMAGE_TYPE } from '../core/damage.js';
 import {
   addStack, stackBonus, stackCount, clearStack, counters,
   perkBlast, chainLightning, radialVolley, healPlayer,
-  reduceAbilityCooldowns, damageFromEffect, effectPower,
+  reduceAbilityCooldowns, damageFromEffect,
   applyBurn, applyPoison, applyFreeze, applyMark,
 } from '../systems/effects.js';
 import { nearestEnemy, blastFriendly } from '../systems/combat.js';
 import { dropMine } from '../entities/projectiles.js';
-import { critChance } from '../entities/player.js';
+import { critChance, techDamage } from '../entities/player.js';
 import { emit } from '../core/events.js';
 import { WEAPONS } from './weapons.js';
 import { ABILITIES } from './abilities.js';
@@ -208,7 +209,7 @@ export const PERKS = [
     hooks: {
       onKill: (game, { enemy, level }) => {
         if (!enemy) return;
-        perkBlast(game, enemy.x, enemy.y, 70 + level * 22, 12 * level * effectPower(game.player), '#ff9f43');
+        perkBlast(game, enemy.x, enemy.y, 70 + level * 22, techDamage(game.player, 12 * level), '#ff9f43');
       },
     } },
 
@@ -226,7 +227,7 @@ export const PERKS = [
   { id: 'retaliate', icon: '↩', name: 'ОТДАЧА', rarity: 'rare', max: 3, weight: 1,
     desc: 'После полученного урона — 8 самонаводящихся снарядов во все стороны, по 10 базового урона за уровень',
     hooks: {
-      onHurt: (game, { level }) => radialVolley(game, 8, 10 * level * effectPower(game.player)),
+      onHurt: (game, { level }) => radialVolley(game, 8, techDamage(game.player, 10 * level)),
     } },
 
   { id: 'cascade', icon: '⧗', name: 'КАСКАД', rarity: 'epic', max: 3, weight: 1,
@@ -240,7 +241,7 @@ export const PERKS = [
       onHit: (game, { enemy, level }) => {
         if (!enemy || enemy.boss) return;
         if (enemy.hp > 0 && enemy.hp / enemy.maxHp < 0.06 * level) {
-          damageFromEffect(game, enemy, enemy.hp + 1, '#ff3b6b');
+          damageFromEffect(game, enemy, enemy.hp + 1, '#ff3b6b', { bypassResistance: true });
         }
       },
     } },
@@ -264,8 +265,8 @@ export const PERKS = [
     damageMod: (game, { level }) => 1 + (game.player.weapons.length - 1) * 0.1 * level },
 
   { id: 'library', icon: '▤', name: 'БИБЛИОТЕКА', rarity: 'epic', max: 2, weight: 1,
-    desc: '+2% урона за каждый взятый модуль',
-    damageMod: (game, { level }) => 1 + counters(game.player).perksTaken * 0.02 * level },
+    desc: '+8 RAM — усиливает технический урон активок, эффектов и конвертированного оружия',
+    apply: (p) => (p.ram += 8) },
 
   { id: 'hoarder', icon: '%', name: 'ПРОЦЕНТЫ', rarity: 'rare', max: 3, weight: 2,
     desc: 'В конце волны +12% накопленных обломков за уровень; максимум 60 обломков за уровень',
@@ -293,7 +294,7 @@ export const PERKS = [
         radius: 16,
         hitRate: 0.45,
         color: '#dff0ff',
-        damage: (pl) => 14 * effectPower(pl),
+        damage: (pl) => techDamage(pl, 14),
       });
     } },
 
@@ -308,7 +309,7 @@ export const PERKS = [
         angle: 0, dist: 0, spin: 0,
         radius: 108, hitRate: 0.5,
         color: '#5ef08a',
-        damage: (pl) => 9 * effectPower(pl),
+        damage: (pl) => techDamage(pl, 9),
       });
     } },
 
@@ -323,7 +324,7 @@ export const PERKS = [
         angle: 0, dist: 0, spin: 0,
         radius: 150, hitRate: 0.6, slow: 0.5,
         color: '#7ee8ff',
-        damage: (pl) => 4 * effectPower(pl),
+        damage: (pl) => techDamage(pl, 4),
       });
     } },
 
@@ -523,7 +524,13 @@ export const PERKS = [
     desc: 'Разовый урон больше 20% максимального HP вызывает взрыв радиусом 140 и базовым уроном 40 за уровень',
     hooks: { onHurt: (game, { damage, level }) => {
       const p = game.player;
-      if (damage > p.maxHp * 0.2) blastFriendly(game, p.x, p.y, 140, 40 * level * effectPower(p), '#ff6b8a');
+      if (damage > p.maxHp * 0.2) blastFriendly(game, p.x, p.y, 140, techDamage(p, 40 * level), '#ff6b8a', {
+        damageSpec: {
+          type: DAMAGE_TYPE.TECHNICAL,
+          penetration: p.technicalPenetration ?? 0,
+          fromEffect: true,
+        },
+      });
     } } },
   { id: 'implode', icon: '◚', name: 'КОЛЛАПСИРУЮЩИЙ ВЗРЫВ', rarity: 'epic', max: 1, weight: 1, tags: ['explosive'],
     requiresFeatures: ['friendlyBlast'],
@@ -532,7 +539,7 @@ export const PERKS = [
     desc: 'Убийство элитного врага вызывает взрыв на 130 радиуса',
     hooks: { onKill: (game, { enemy, level }) => {
       if (!enemy?.elite) return;
-      perkBlast(game, enemy.x, enemy.y, 130, 20 * level * effectPower(game.player), '#ffb14a');
+      perkBlast(game, enemy.x, enemy.y, 130, techDamage(game.player, 20 * level), '#ffb14a');
     } } },
   { id: 'abilityburst', icon: '◜', name: 'ОТДАЧА АКТИВКИ', rarity: 'epic', max: 2, weight: 1, tags: ['explosive', 'ability'],
     requiresFeatures: ['ability'],
@@ -540,12 +547,18 @@ export const PERKS = [
     desc: 'Использование активной способности вызывает взрыв 110 радиуса вокруг игрока',
     hooks: { onAbility: (game, { level }) => {
       const p = game.player;
-      blastFriendly(game, p.x, p.y, 110, 18 * level * effectPower(p), '#c99bff');
+      blastFriendly(game, p.x, p.y, 110, techDamage(p, 18 * level), '#c99bff', {
+        damageSpec: {
+          type: DAMAGE_TYPE.TECHNICAL,
+          penetration: p.technicalPenetration ?? 0,
+          fromEffect: true,
+        },
+      });
     } } },
   { id: 'craterfield', icon: '◝', name: 'ВОРОНКИ', rarity: 'rare', max: 3, weight: 1, tags: ['explosive'],
     desc: 'Разбитый астероид детонирует по площади',
     hooks: { onAsteroidBreak: (game, { asteroid, level }) => {
-      perkBlast(game, asteroid.x, asteroid.y, 60 + level * 12, 10 * level * effectPower(game.player), '#a08c6e');
+      perkBlast(game, asteroid.x, asteroid.y, 60 + level * 12, techDamage(game.player, 10 * level), '#a08c6e');
     } } },
 
   // ═══════════════════════════ ЦЕПИ И МОЛНИИ
@@ -560,7 +573,7 @@ export const PERKS = [
     desc: 'Убийство запускает молнию по ближайшим целям',
     hooks: { onKill: (game, { enemy, level }) => {
       if (!enemy) return;
-      chainLightning(game, enemy.x, enemy.y, 1 + level, 14 * level * effectPower(game.player));
+      chainLightning(game, enemy.x, enemy.y, 1 + level, techDamage(game.player, 14 * level));
     } } },
   { id: 'chainrange', icon: '⎕', name: 'ДАЛЬНОБОЙНАЯ ЦЕПЬ', rarity: 'common', max: 3, weight: 2, tags: ['chain'],
     requiresFeatures: ['chain'],
@@ -577,7 +590,7 @@ export const PERKS = [
       if (fx.sparkTimer >= 6) {
         fx.sparkTimer = 0;
         const p = game.player;
-        chainLightning(game, p.x, p.y, 3 + level, 16 * level * effectPower(p));
+        chainLightning(game, p.x, p.y, 3 + level, techDamage(p, 16 * level));
       }
     } } },
   { id: 'chainheal', icon: '⎙', name: 'ИСКРОВОЙ КОНТУР', rarity: 'rare', max: 3, weight: 2, tags: ['chain', 'sustain'],
@@ -593,13 +606,13 @@ export const PERKS = [
     provides: ['burn'],
     desc: '30% шанс поджечь цель при попадании — горит 3 сек',
     hooks: { onHit: (game, { enemy, level }) => {
-      if (Math.random() < 0.3) applyBurn(enemy, (4 + level * 2) * effectPower(game.player), 3);
+      if (Math.random() < 0.3) applyBurn(enemy, techDamage(game.player, 4 + level * 2), 3);
     } } },
   { id: 'venom', icon: '☣', name: 'ЯД', rarity: 'rare', max: 3, weight: 2, tags: ['status'],
     provides: ['poison'],
     desc: '25% шанс отравить цель — слабый урон, но долгий (6 сек)',
     hooks: { onHit: (game, { enemy, level }) => {
-      if (Math.random() < 0.25) applyPoison(enemy, (2 + level) * effectPower(game.player), 6);
+      if (Math.random() < 0.25) applyPoison(enemy, techDamage(game.player, 2 + level), 6);
     } } },
   { id: 'cryo', icon: '❄', name: 'КРИООЧЕРЕДЬ', rarity: 'rare', max: 3, weight: 2, tags: ['status'],
     provides: ['freeze'],
@@ -635,7 +648,7 @@ export const PERKS = [
     hooks: { onKill: (game, { enemy, level }) => {
       if (!enemy || !(enemy.freezeUntil > 0)) return;
       healPlayer(game, 4 * level);
-      perkBlast(game, enemy.x, enemy.y, 60, 8 * level * effectPower(game.player), '#7ee8ff');
+      perkBlast(game, enemy.x, enemy.y, 60, techDamage(game.player, 8 * level), '#7ee8ff');
     } } },
   { id: 'poisonstack', icon: '⚗', name: 'КОНЦЕНТРАТ ЯДА', rarity: 'rare', max: 3, weight: 2, tags: ['status'],
     requiresFeatures: ['poison'],
@@ -736,7 +749,8 @@ export const PERKS = [
 
   // ═══════════════════════════ ОБОРОНА
   { id: 'armorplate', icon: '▧', name: 'БРОНЕПЛАСТИНЫ', rarity: 'common', max: 5, weight: 2, tags: ['defense'],
-    desc: '+1 очко брони — урон по тебе снижается (гипербола, не до 100%)', apply: (p) => (p.armorPoints += 1) },
+    desc: '+1 очко физического сопротивления — эффект растёт гиперболически, потолок 75%',
+    apply: (p) => (p.physicalResistPoints += 1) },
   { id: 'evasion', icon: '▨', name: 'УКЛОНЕНИЕ', rarity: 'common', max: 5, weight: 2, tags: ['defense'],
     desc: '+1 очко уклонения — шанс полностью избежать удара', apply: (p) => (p.dodgePoints += 1) },
   { id: 'platingheavy', icon: '▩', name: 'ТЯЖЁЛАЯ БРОНЯ', rarity: 'rare', max: 3, weight: 2, tags: ['defense'],
@@ -752,8 +766,8 @@ export const PERKS = [
     desc: '+18 щита и +25 HP разом',
     apply: (p) => { p.maxShield += 18; p.shield = Math.min(p.maxShield, p.shield + 18); p.maxHp += 25; p.hp += 25; } },
   { id: 'shockabsorber', icon: '▯', name: 'АМОРТИЗАТОР', rarity: 'epic', max: 1, weight: 1, tags: ['defense'],
-    desc: 'Урон больше половины текущего HP разом срезается втрое',
-    apply: (p) => { p.effects.flags.dampen = true; } },
+    desc: '+3 очка технического сопротивления; урон больше половины текущего HP разом срезается втрое',
+    apply: (p) => { p.technicalResistPoints += 3; p.effects.flags.dampen = true; } },
   { id: 'reflexes', icon: '▰', name: 'РЕФЛЕКСЫ', rarity: 'rare', max: 3, weight: 2, tags: ['defense'],
     desc: '+1.5 очка уклонения, но −10% максимального щита',
     apply: (p) => { p.dodgePoints += 1.5; p.maxShield *= 0.9; p.shield = Math.min(p.shield, p.maxShield); } },
@@ -869,8 +883,8 @@ export const PERKS = [
     apply: (p) => { p.effects.flags.evoLance = true; } },
   { id: 'evo_storm', icon: '⟓', name: 'ГРОЗА', rarity: 'legendary', max: 1,
     requiresWeapon: 'chain', requires: { caliber: 3 },
-    desc: 'ЭВОЛЮЦИЯ «Цепи»: каждый прыжок молнии бьёт по площади в точке удара',
-    apply: (p) => { p.effects.flags.evoStorm = true; } },
+    desc: 'ЭВОЛЮЦИЯ «Цепи»: каждый прыжок бьёт по площади; +20 п.п. пробития технического сопротивления',
+    apply: (p) => { p.effects.flags.evoStorm = true; p.technicalPenetration += 0.2; } },
   { id: 'evo_carpet', icon: '⟔', name: 'КОВЁР', rarity: 'legendary', max: 1,
     requiresWeapon: 'lob', requires: { boom: 2 },
     desc: 'ЭВОЛЮЦИЯ «Миномёта»: один выстрел кладёт веер из 5 гранат вместо одной',
@@ -904,10 +918,11 @@ export const PERKS = [
   { id: 'syn_overload', icon: '⟛', name: 'ПЕРЕГРУЗКА КОНТУРА', rarity: 'legendary', max: 1,
     requiresTags: { energy: 3 },
     provides: ['chain'],
-    desc: 'СИНЕРГИЯ: каждый 5-й выстрел запускает молнию по ближайшим врагам',
+    desc: 'КОНВЕРТЕР: оружие наносит технический урон и использует RAM вместо плоского урона; каждый 5-й выстрел запускает молнию',
+    apply: (p) => { p.weaponDamageType = DAMAGE_TYPE.TECHNICAL; },
     hooks: { onShoot: (game) => {
       const pl = game.player;
-      if (counters(pl).shots % 5 === 0) chainLightning(game, pl.x, pl.y, 3, 14 * effectPower(pl));
+      if (counters(pl).shots % 5 === 0) chainLightning(game, pl.x, pl.y, 3, techDamage(pl, 14));
     } } },
   { id: 'syn_chaindet', icon: '⟜', name: 'ЦЕПНАЯ ДЕТОНАЦИЯ', rarity: 'legendary', max: 1,
     requiresTags: { explosive: 3 },
@@ -915,9 +930,9 @@ export const PERKS = [
     desc: 'СИНЕРГИЯ: убийство взрывом наносит мощный взрыв и поджигает всех рядом',
     hooks: { onKill: (game, { enemy }) => {
       if (!enemy) return;
-      perkBlast(game, enemy.x, enemy.y, 120, 30 * effectPower(game.player), '#ff9f43');
+      perkBlast(game, enemy.x, enemy.y, 120, techDamage(game.player, 30), '#ff9f43');
       for (const e of game.entities.enemies.slice()) {
-        if ((e.x - enemy.x) ** 2 + (e.y - enemy.y) ** 2 < 120 ** 2) applyBurn(e, 8 * effectPower(game.player), 3);
+        if ((e.x - enemy.x) ** 2 + (e.y - enemy.y) ** 2 < 120 ** 2) applyBurn(e, techDamage(game.player, 8), 3);
       }
     } } },
   { id: 'syn_epidemic', icon: '⟝', name: 'ЭПИДЕМИЯ', rarity: 'legendary', max: 1,
@@ -946,7 +961,7 @@ export const PERKS = [
         angle: 0, dist: 0, spin: 0,
         radius: 260, hitRate: 0.7,
         color: '#ffd166',
-        damage: (pl) => 11 * effectPower(pl),
+        damage: (pl) => techDamage(pl, 11),
       });
     } },
   { id: 'syn_perfectangle', icon: '⟟', name: 'ИДЕАЛЬНЫЙ УГОЛ', rarity: 'legendary', max: 1,
@@ -963,12 +978,12 @@ export const PERKS = [
     desc: 'СИНЕРГИЯ: убийство запускает молнию с точки гибели врага',
     hooks: { onKill: (game, { enemy }) => {
       if (!enemy) return;
-      chainLightning(game, enemy.x, enemy.y, 3, 16 * effectPower(game.player));
+      chainLightning(game, enemy.x, enemy.y, 3, techDamage(game.player, 16));
     } } },
   { id: 'syn_railgun', icon: '⟡', name: 'РЕЛЬСОТРОН', rarity: 'legendary', max: 1,
     requiresTags: { pierce: 3 },
-    desc: 'СИНЕРГИЯ: +3 пробития разом, часть пробития превращается в плоский урон',
-    apply: (p) => { p.pierce += 3; p.dmgFlat += p.pierce * 1.5; } },
+    desc: 'СИНЕРГИЯ: +3 пробития целей, +20 п.п. пробития физического сопротивления; часть пробития превращается в плоский урон',
+    apply: (p) => { p.pierce += 3; p.physicalPenetration += 0.2; p.dmgFlat += p.pierce * 1.5; } },
   { id: 'syn_swarmlord', icon: '⟢', name: 'ПОВЕЛИТЕЛЬ РОЯ', rarity: 'legendary', max: 1,
     requiresTags: { swarm: 3 },
     desc: 'СИНЕРГИЯ: 15% шанс на попадание выпустить самонаводящуюся мини-ракету',
@@ -978,7 +993,12 @@ export const PERKS = [
       const angle = Math.atan2(enemy.y - pl.y, enemy.x - pl.x);
       game.projectiles.bullets.push({
         x: pl.x, y: pl.y, vx: Math.cos(angle) * 560, vy: Math.sin(angle) * 560, angle,
-        damage: 10 * effectPower(pl), crit: false, life: 1, pierce: 0, hit: new Set(),
+        damage: techDamage(pl, 10), crit: false, life: 1, pierce: 0, hit: new Set(),
+        damageSpec: {
+          type: DAMAGE_TYPE.TECHNICAL,
+          penetration: pl.technicalPenetration ?? 0,
+          fromEffect: true,
+        },
         homing: 0.9, ricochet: 0, splash: 0, kind: 'missile', color: '#ff8a5e', r: 5,
       });
     } } },

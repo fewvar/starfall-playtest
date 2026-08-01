@@ -1,4 +1,5 @@
 import { angLerp, angDiff, lerp, rnd, TAU, clamp } from '../core/math.js';
+import { DAMAGE_TYPE } from '../core/damage.js';
 import { sfx } from '../core/audio.js';
 import { camera } from '../core/camera.js';
 import { emit } from '../core/events.js';
@@ -29,6 +30,8 @@ import { currentWeapon } from './player.js';
 const MINION_LIMIT = 26;
 const PRIME_RAM_DISTANCE = 900;
 const PRIME_RAM_SPEED_MUL = 3.4;
+const PHYSICAL_DAMAGE = { type: DAMAGE_TYPE.PHYSICAL, penetration: 0, fromEffect: false };
+const TECHNICAL_DAMAGE = { type: DAMAGE_TYPE.TECHNICAL, penetration: 0, fromEffect: false };
 
 /** Длительности замахов = длительности телеграфов. Одно число на обе стороны. */
 const TELE = {
@@ -106,7 +109,7 @@ export function updateBoss(game, b, dt) {
   b.y += b.vy * dt;
 
   if (dist < b.r + p.r) {
-    hurtPlayer(game, b.damage * (b.boss === 'prime' ? 1.5 : 1));
+    hurtPlayer(game, b.damage * (b.boss === 'prime' ? 1.5 : 1), PHYSICAL_DAMAGE);
     p.vx += nx * 420;
     p.vy += ny * 420;
     b.vx *= 0.3;
@@ -158,7 +161,7 @@ function updateDread(game, b, def, dt, approach, toPlayer) {
     const n = b.phase >= 2 ? 15 : 9;
     const arc = b.phase >= 2 ? 1.9 : 1.2;
     for (let i = 0; i < n; i++) {
-      spawnFoeBullet(game, b, toPlayer + (i / (n - 1) - 0.5) * arc, 380, b.damage * 0.45, def.color);
+      spawnFoeBullet(game, b, toPlayer + (i / (n - 1) - 0.5) * arc, 380, b.damage * 0.45, def.color, 4, PHYSICAL_DAMAGE);
     }
     sfx.enemyShot();
   }
@@ -200,7 +203,7 @@ function updateDread(game, b, def, dt, approach, toPlayer) {
             y: b.y + Math.sin(side) * 420 * s + Math.sin(b.wallAngle) * i * 90,
             r: 6,
           };
-          spawnFoeBullet(game, from, side - Math.PI / 2 * s, 210, b.damage * 0.5, '#ff3b6b', 5);
+          spawnFoeBullet(game, from, side - Math.PI / 2 * s, 210, b.damage * 0.5, '#ff3b6b', 5, PHYSICAL_DAMAGE);
         }
       }
       sfx.bigBoom();
@@ -266,7 +269,7 @@ function updatePrime(game, b, def, dt, nx, ny, dist, toPlayer) {
       b.rockAt = { x: game.player.x, y: game.player.y };
       telegraph(game, { kind: 'circle', x: b.rockAt.x, y: b.rockAt.y, r: 150, life: TELE.rock, color: '#c9955a' });
     } else if (b.rockAt && b.cd3 <= 0) {
-      blastHostile(game, b.rockAt.x, b.rockAt.y, 150, b.damage * 1.1, '#c9955a');
+      blastHostile(game, b.rockAt.x, b.rockAt.y, 150, b.damage * 1.1, '#c9955a', PHYSICAL_DAMAGE);
       b.rockAt = null;
       b.cd3 = b.phase >= 3 ? 3.4 : 4.6;
     }
@@ -287,7 +290,7 @@ function updatePrime(game, b, def, dt, nx, ny, dist, toPlayer) {
       for (let i = 0; i < n; i++) {
         const a = (i / n) * TAU;
         const from = { x: b.ringAt.x + Math.cos(a) * 520, y: b.ringAt.y + Math.sin(a) * 520, r: 6 };
-        spawnFoeBullet(game, from, a + Math.PI, 260, b.damage * 0.45, '#ffb14a', 5);
+        spawnFoeBullet(game, from, a + Math.PI, 260, b.damage * 0.45, '#ffb14a', 5, PHYSICAL_DAMAGE);
       }
       sfx.bigBoom();
       camera.shake(10);
@@ -319,7 +322,7 @@ function updateEye(game, b, def, dt, approach, dist, toPlayer) {
     const beams = b.phase >= 2 ? [0, Math.PI] : [0];
     for (const off of beams) {
       if (Math.abs(angDiff(b.beamAngle + off, toPlayer)) < 0.13 && dist < 1200) {
-        hurtPlayer(game, b.damage * 1.4 * dt * 6, true);
+        hurtPlayer(game, b.damage * 1.4 * dt * 6, { ...TECHNICAL_DAMAGE, continuous: true });
         spark(game.fx, game.player.x, game.player.y, 1, def.color, 120, 0.25, 2);
       }
     }
@@ -336,7 +339,7 @@ function updateEye(game, b, def, dt, approach, dist, toPlayer) {
       b.cd = b.phase >= 2 ? 2.2 : 3.2;
       const n = b.phase >= 2 ? 22 : 14;
       for (let i = 0; i < n; i++) {
-        spawnFoeBullet(game, b, (i / n) * TAU + b.spin, 260, b.damage * 0.4, def.color);
+        spawnFoeBullet(game, b, (i / n) * TAU + b.spin, 260, b.damage * 0.4, def.color, 4, PHYSICAL_DAMAGE);
       }
     }
   }
@@ -375,7 +378,7 @@ function updateGravedigger(game, b, def, dt, approach, toPlayer) {
 
   // Ф3: потеря щита рвёт обломки по площади — не стой в упор, когда добиваешь
   if (b.phase >= 3 && b.shieldWasUp && (b.shield ?? 0) <= 0) {
-    blastHostile(game, b.x, b.y, 260, b.damage * 1.6, def.color);
+    blastHostile(game, b.x, b.y, 260, b.damage * 1.6, def.color, PHYSICAL_DAMAGE);
     sfx.bigBoom();
     camera.shake(14);
   }
@@ -391,7 +394,7 @@ function updateGravedigger(game, b, def, dt, approach, toPlayer) {
     b.graveCharge = false;
     b.cd2 = 2.6;
     for (let i = -1; i <= 1; i++) {
-      spawnFoeBullet(game, b, b.graveAngle + i * 0.26, 330, b.damage * 0.5, def.color);
+      spawnFoeBullet(game, b, b.graveAngle + i * 0.26, 330, b.damage * 0.5, def.color, 4, PHYSICAL_DAMAGE);
     }
     sfx.enemyShot();
   }
@@ -421,7 +424,7 @@ function updateConduit(game, b, def, dt, approach, toPlayer) {
     b.zapAt = { x: game.player.x, y: game.player.y };
     telegraph(game, { kind: 'circle', x: b.zapAt.x, y: b.zapAt.y, r: 130, life: TELE.zap, color: def.color });
   } else if (b.zapAt && b.cd <= 0) {
-    blastHostile(game, b.zapAt.x, b.zapAt.y, 130, b.damage * 1.2, def.color);
+    blastHostile(game, b.zapAt.x, b.zapAt.y, 130, b.damage * 1.2, def.color, TECHNICAL_DAMAGE);
     game.fx.beams.push({ x1: b.x, y1: b.y, x2: b.zapAt.x, y2: b.zapAt.y, color: def.color, width: 3, life: 0.18, max: 0.18 });
     b.zapAt = null;
     b.cd = b.phase >= 2 ? 2.2 : 3;
@@ -467,7 +470,7 @@ function updateConduit(game, b, def, dt, approach, toPlayer) {
       const n2 = b.nodes[(i + 1) % b.nodes.length];
       game.fx.beams.push({ x1: n1.x, y1: n1.y, x2: n2.x, y2: n2.y, color: def.color, width: 2, life: 0.06, max: 0.06 });
       if (distToSegment(p.x, p.y, n1.x, n1.y, n2.x, n2.y) < 26 + p.r) {
-        hurtPlayer(game, b.damage * dt * 5, true);
+        hurtPlayer(game, b.damage * dt * 5, { ...TECHNICAL_DAMAGE, continuous: true });
       }
     }
   }
@@ -493,7 +496,7 @@ function updateHive(game, b, def, dt, approach) {
     b.cd = b.phase >= 2 ? 0.12 : 0.18;
     const arms = b.phase >= 2 ? 3 : 2;
     for (let i = 0; i < arms; i++) {
-      spawnFoeBullet(game, b, b.spin * 2.2 + (i / arms) * TAU, 300, b.damage * 0.35, def.color);
+      spawnFoeBullet(game, b, b.spin * 2.2 + (i / arms) * TAU, 300, b.damage * 0.35, def.color, 4, PHYSICAL_DAMAGE);
     }
   }
 
@@ -555,7 +558,7 @@ function updateDistortion(game, b, def, dt, approach, toPlayer) {
     const count = Math.min(5, w.count ?? 1);
     for (let i = 0; i < count; i++) {
       const off = count === 1 ? 0 : (i - (count - 1) / 2) * (w.spread || 0.12) * 2;
-      spawnFoeBullet(game, b, toPlayer + off, 400, b.damage * 0.5, def.color);
+      spawnFoeBullet(game, b, toPlayer + off, 400, b.damage * 0.5, def.color, 4, PHYSICAL_DAMAGE);
     }
     sfx.enemyShot();
   }

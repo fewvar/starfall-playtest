@@ -345,6 +345,7 @@ export function applyStationReward(player, rewardOrId) {
 
   switch (reward.stat) {
     case 'damage': player.dmgAdd += reward.value; break;
+    case 'ram': player.ram += reward.value; break;
     case 'rate': player.attackSpeed += reward.value; break;
     case 'hull': player.maxHp += reward.value; player.hp = player.maxHp; break;
     case 'shield':

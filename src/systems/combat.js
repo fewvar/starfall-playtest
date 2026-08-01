@@ -2,12 +2,15 @@ import { emit } from '../core/events.js';
 import { sfx } from '../core/audio.js';
 import { camera } from '../core/camera.js';
 import { rnd } from '../core/math.js';
+import { DAMAGE_TYPE, normalizeDamageSpec, resistanceFactor } from '../core/damage.js';
 import { makeEnemy, makePickup } from '../entities/factory.js';
 import { spark, floatText, blastRing } from '../entities/effects.js';
-import { fireHook, hitMultiplier, counters, clearStack, effectPower, applyFreeze } from './effects.js';
+import { fireHook, hitMultiplier, counters, clearStack, applyFreeze } from './effects.js';
 // Цикл player → effects → combat → player безопасен: эти функции зовутся
 // только во время боя, когда все модули уже загружены.
-import { armorFactor, dodgeChance } from '../entities/player.js';
+import {
+  armorFactor, dodgeChance, physicalResistance, technicalResistance, techDamage,
+} from '../entities/player.js';
 import { healingBlocked } from './location-policy.js';
 
 /**
@@ -17,10 +20,15 @@ import { healingBlocked } from './location-policy.js';
 
 export function damageEnemy(game, enemy, amount, crit = false, opts = {}) {
   const { player, fx } = game;
+  const spec = normalizeDamageSpec(opts);
+  if (!enemy.boss && enemy.type && !enemy.bestiarySeen) {
+    enemy.bestiarySeen = true;
+    emit('enemy:seen', { enemy });
+  }
 
   // Условные множители по цели («в упор», «добивание», «первый контакт»)
   // применяются только к оружейному урону: иначе перки умножали бы сами себя.
-  if (!opts.fromEffect) amount *= hitMultiplier(game, enemy, { crit });
+  if (!spec.fromEffect) amount *= hitMultiplier(game, enemy, { crit });
   if (enemy.marked) amount *= enemy.marked.mult;
 
   // Щит врага гасится первым и только потом корпус («Могильщик» поднимает
@@ -37,12 +45,22 @@ export function damageEnemy(game, enemy, amount, crit = false, opts = {}) {
     }
   }
 
+  const resistance = spec.type === DAMAGE_TYPE.TECHNICAL
+    ? enemy.technicalResist
+    : enemy.physicalResist;
+  const factor = opts.bypassResistance ? 1 : resistanceFactor(resistance, spec.penetration);
+  const resisted = factor < 1;
+  amount *= factor;
   enemy.hp -= amount;
   enemy.flash = 0.12;
-  floatText(fx, enemy.x, enemy.y - enemy.r - 6, (crit ? '×' : '') + Math.round(amount), crit ? '#ffe066' : '#ffffff');
+  floatText(
+    fx, enemy.x, enemy.y - enemy.r - 6,
+    (resisted ? '≋' : '') + (crit ? '×' : '') + Math.round(amount),
+    resisted ? 'rgba(138,163,184,0.65)' : crit ? '#ffe066' : '#ffffff',
+  );
   sfx.hit();
 
-  if (!opts.fromEffect) {
+  if (!spec.fromEffect) {
     fireHook(game, 'onHit', { enemy, damage: amount, crit, x: enemy.x, y: enemy.y });
     if (crit) fireHook(game, 'onCrit', { enemy, damage: amount, x: enemy.x, y: enemy.y });
   }
@@ -82,11 +100,17 @@ export function killEnemy(game, enemy) {
   camera.shake(enemy.elite ? 14 : 5);
 
   // активка «Метка смерти»: помеченная цель взрывается при гибели
-  if (enemy.deathMarkExplode) blastFriendly(game, enemy.x, enemy.y, 130, 45, '#ff3b6b');
+  if (enemy.deathMarkExplode) blastFriendly(game, enemy.x, enemy.y, 130, techDamage(game.player, 45), '#ff3b6b', {
+    damageSpec: {
+      type: DAMAGE_TYPE.TECHNICAL,
+      penetration: game.player.technicalPenetration ?? 0,
+      fromEffect: true,
+    },
+  });
 
   // бомбер и мина рвутся посмертно
-  if (enemy.type === 'bomber') blastHostile(game, enemy.x, enemy.y, 92, 24, enemy.color);
-  if (enemy.type === 'mine') blastHostile(game, enemy.x, enemy.y, 92, 16, enemy.color);
+  if (enemy.type === 'bomber') blastHostile(game, enemy.x, enemy.y, 92, 24, enemy.color, { type: DAMAGE_TYPE.PHYSICAL });
+  if (enemy.type === 'mine') blastHostile(game, enemy.x, enemy.y, 92, 16, enemy.color, { type: DAMAGE_TYPE.PHYSICAL });
 
   // делитель распадается на двух дронов
   if (enemy.type === 'splitter') {
@@ -137,7 +161,9 @@ export function applyBlastPull(game, enemy, x, y, radius, allowPull = true) {
 }
 
 /** Взрыв игрока: бьёт врагов и астероиды. */
-export function blastFriendly(game, x, y, radius, damage, color, { allowPull = true } = {}) {
+export function blastFriendly(game, x, y, radius, damage, color, {
+  allowPull = true, damageSpec = undefined,
+} = {}) {
   blastRing(game.fx, x, y, radius, color);
   const freeze = game.player.effects.flags.blastFreeze;
   for (const e of game.entities.enemies.slice()) {
@@ -145,7 +171,7 @@ export function blastFriendly(game, x, y, radius, damage, color, { allowPull = t
     const dy = y - e.y;
     const distance = Math.hypot(dx, dy);
     if (distance < radius + e.r) {
-      damageEnemy(game, e, damage, false);
+      damageEnemy(game, e, damage, false, damageSpec);
       if (freeze) applyFreeze(e, 0.5, 1.5);
       // Импульс идёт после урона и группирует только выживших. Боссы,
       // элиты и крупные цели сохраняют массу и сдвигаются заметно слабее.
@@ -165,10 +191,10 @@ export function blastFriendly(game, x, y, radius, damage, color, { allowPull = t
 }
 
 /** Взрыв врага: бьёт игрока. */
-export function blastHostile(game, x, y, radius, damage, color) {
+export function blastHostile(game, x, y, radius, damage, color, damageSpec) {
   blastRing(game.fx, x, y, radius, color);
   if ((game.player.x - x) ** 2 + (game.player.y - y) ** 2 < (radius + game.player.r) ** 2) {
-    hurtPlayer(game, damage);
+    hurtPlayer(game, damage, damageSpec);
   }
   spark(game.fx, x, y, 16, color, 280, 0.55, 2.8);
   sfx.boom();
@@ -215,6 +241,7 @@ export function hurtPlayer(game, amount, continuousOrOptions = false) {
     ? continuousOrOptions
     : { continuous: continuousOrOptions };
   const continuous = !!options.continuous;
+  const spec = normalizeDamageSpec(options);
   if (game.run.over) return;
   if (!options.bypassInvulnerability && (p.iframes > 0 || p.dashTime > 0)) return;
 
@@ -241,9 +268,23 @@ export function hurtPlayer(game, amount, continuousOrOptions = false) {
   }
   if (!options.directHull) p.shieldTimer = 3.2 * p.shieldDelayMul;
   if (!options.directHull && shieldBefore > 0 && p.shield <= 0 && p.effects.flags.shieldBreakNova) {
-    blastFriendly(game, p.x, p.y, 100, 25 * p.effects.flags.shieldBreakNova * effectPower(p), '#7ee8ff');
+    blastFriendly(game, p.x, p.y, 100, techDamage(p, 25 * p.effects.flags.shieldBreakNova), '#7ee8ff', {
+      damageSpec: {
+        type: DAMAGE_TYPE.TECHNICAL,
+        penetration: p.technicalPenetration ?? 0,
+        fromEffect: true,
+      },
+    });
   }
   if (amount <= 0) return;
+
+  // directHull обходит броню и щит, но резист — только при явном bypassResistance.
+  if (!options.bypassResistance) {
+    const resistance = spec.type === DAMAGE_TYPE.TECHNICAL
+      ? technicalResistance(p)
+      : physicalResistance(p);
+    amount *= resistanceFactor(resistance, spec.penetration);
+  }
 
   p.hp -= amount;
   const stats = counters(p);
@@ -257,7 +298,13 @@ export function hurtPlayer(game, amount, continuousOrOptions = false) {
     spark(game.fx, p.x, p.y, 12, '#ff6b8a', 240, 0.5, 2.2);
     sfx.hurt();
     camera.shake(9);
-    if (p.nova) blastFriendly(game, p.x, p.y, 90 + p.nova * 40, 18 * p.nova * effectPower(p), '#7ee8ff');
+    if (p.nova) blastFriendly(game, p.x, p.y, 90 + p.nova * 40, techDamage(p, 18 * p.nova), '#7ee8ff', {
+      damageSpec: {
+        type: DAMAGE_TYPE.TECHNICAL,
+        penetration: p.technicalPenetration ?? 0,
+        fromEffect: true,
+      },
+    });
     fireHook(game, 'onHurt', { damage: amount });
   } else if (!options.silent && Math.random() < 0.3) {
     sfx.hurt();
@@ -281,7 +328,14 @@ export function hurtPlayer(game, amount, continuousOrOptions = false) {
       p.iframes = 2.5;
       // Спаскапсула — аварийный одноразовый эффект, а не источник
       // повторяемого взрывного билда: «Коллапс» её не модифицирует.
-      blastFriendly(game, p.x, p.y, 320, 60 * effectPower(p), '#5ef08a', { allowPull: false });
+      blastFriendly(game, p.x, p.y, 320, techDamage(p, 60), '#5ef08a', {
+        allowPull: false,
+        damageSpec: {
+          type: DAMAGE_TYPE.TECHNICAL,
+          penetration: p.technicalPenetration ?? 0,
+          fromEffect: true,
+        },
+      });
       floatText(game.fx, p.x, p.y - 40, 'СПАСКАПСУЛА', '#5ef08a');
       sfx.levelUp();
       camera.shake(18);
@@ -304,7 +358,7 @@ export function resolveAsteroidHits(game) {
     const d = Math.hypot(dx, dy) || 1;
     const nx = dx / d;
     const ny = dy / d;
-    hurtPlayer(game, 4 + a.r * 0.18);
+    hurtPlayer(game, 4 + a.r * 0.18, { type: DAMAGE_TYPE.PHYSICAL });
     p.vx += nx * 240;
     p.vy += ny * 240;
     a.vx -= nx * 120;

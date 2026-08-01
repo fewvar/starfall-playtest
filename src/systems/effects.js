@@ -1,4 +1,5 @@
 import { TAU, clamp, rnd } from '../core/math.js';
+import { DAMAGE_TYPE } from '../core/damage.js';
 import { sfx } from '../core/audio.js';
 import { camera } from '../core/camera.js';
 import { spark, floatText, blastRing } from '../entities/effects.js';
@@ -241,9 +242,14 @@ function updateOrbitals(game, dt) {
 }
 
 /** Урон от перка/активки — идёт мимо оружейных множителей. */
-export function damageFromEffect(game, enemy, amount, color = '#7ee8ff') {
+export function damageFromEffect(game, enemy, amount, color = '#7ee8ff', options = {}) {
   spark(game.fx, enemy.x, enemy.y, 3, color, 140, 0.25, 2);
-  damageEnemy(game, enemy, amount, false, { fromEffect: true });
+  damageEnemy(game, enemy, amount, false, {
+    fromEffect: true,
+    type: DAMAGE_TYPE.TECHNICAL,
+    penetration: game.player.technicalPenetration ?? 0,
+    ...options,
+  });
 }
 
 // ─────────────────────────────── активные способности
@@ -347,6 +353,11 @@ export function radialVolley(game, count, damage, speed = 620, color = '#cdf3ff'
       ricochet: 0,
       splash,
       kind: 'bullet',
+      damageSpec: {
+        type: DAMAGE_TYPE.TECHNICAL,
+        penetration: p.technicalPenetration ?? 0,
+        fromEffect: true,
+      },
       color,
       r: 3,
     });

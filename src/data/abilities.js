@@ -1,13 +1,14 @@
 import { TAU, rnd } from '../core/math.js';
+import { DAMAGE_TYPE } from '../core/damage.js';
 import { sfx } from '../core/audio.js';
 import { camera } from '../core/camera.js';
 import { spark, blastRing, beam, floatText } from '../entities/effects.js';
 import {
-  perkBlast, radialVolley, healPlayer, slowEnemies, damageFromEffect, effectPower,
+  perkBlast, radialVolley, healPlayer, slowEnemies, damageFromEffect,
   chainLightning, applyBurn, applyMark,
 } from '../systems/effects.js';
 import { damageEnemy, nearestEnemy } from '../systems/combat.js';
-import { currentWeapon, weaponDamage, fireInterval } from '../entities/player.js';
+import { currentWeapon, techDamage, fireInterval } from '../entities/player.js';
 
 /**
  * Активные способности: ручной кулдаун, вешаются на клавиши E / R / F
@@ -31,7 +32,7 @@ export const ABILITIES = {
         const push = (1 - d / radius) * 900;
         e.vx += (dx / d) * push;
         e.vy += (dy / d) * push;
-        damageFromEffect(game, e, 45 * effectPower(p), '#7ee8ff');
+        damageFromEffect(game, e, techDamage(p, 45), '#7ee8ff');
       }
       // сбиваем вражеские снаряды
       game.projectiles.foeBullets = game.projectiles.foeBullets.filter(
@@ -57,7 +58,7 @@ export const ABILITIES = {
     id: 'volley', icon: '⁂', name: 'ЗАЛП', cooldown: 8,
     desc: '16 самонаводящихся снарядов во все стороны',
     use(game, p) {
-      radialVolley(game, 16, 26 * effectPower(p), 680, '#ffd08a');
+      radialVolley(game, 16, techDamage(p, 26), 680, '#ffd08a');
       camera.shake(5);
     },
   },
@@ -68,7 +69,7 @@ export const ABILITIES = {
     use(game, p) {
       const x = p.x + Math.cos(p.angle) * 220;
       const y = p.y + Math.sin(p.angle) * 220;
-      game.singularities.push({ x, y, life: 2.4, max: 2.4, radius: 420, damage: 70 * effectPower(p) });
+      game.singularities.push({ x, y, life: 2.4, max: 2.4, radius: 420, damage: techDamage(p, 70) });
       sfx.alarm();
       camera.shake(6);
     },
@@ -101,8 +102,8 @@ export const ABILITIES = {
       p.y += (dy / d) * range;
       p.iframes = Math.max(p.iframes, 0.4);
       beam(game.fx, fromX, fromY, p.x, p.y, '#c99bff', 4);
-      perkBlast(game, fromX, fromY, 120, 30 * effectPower(p), '#c99bff');
-      perkBlast(game, p.x, p.y, 120, 30 * effectPower(p), '#c99bff');
+      perkBlast(game, fromX, fromY, 120, techDamage(p, 30), '#c99bff');
+      perkBlast(game, p.x, p.y, 120, techDamage(p, 30), '#c99bff');
       sfx.dash();
     },
   },
@@ -111,7 +112,7 @@ export const ABILITIES = {
     id: 'orbital', icon: '⇓', name: 'ОРБИТАЛЬНЫЙ УДАР', cooldown: 14,
     desc: 'Колонна огня падает в точку курсора',
     use(game, p) {
-      game.strikes.push({ x: game.aim.x, y: game.aim.y, delay: 0.85, radius: 220, damage: 260 * effectPower(p) });
+      game.strikes.push({ x: game.aim.x, y: game.aim.y, delay: 0.85, radius: 220, damage: techDamage(p, 260) });
       sfx.alarm();
     },
   },
@@ -146,7 +147,7 @@ export const ABILITIES = {
         y: p.y + rnd(60, -60),
         life: 4,
         radius: 520,
-        damage: 120 * effectPower(p),
+        damage: techDamage(p, 120),
       });
       sfx.select();
     },
@@ -208,7 +209,7 @@ export const ABILITIES = {
     provides: ['friendlyBlast'],
     desc: '8 дронов-камикадзе наводятся на ближайших врагов',
     use(game, p) {
-      radialVolley(game, 8, 30 * effectPower(p), 480, '#ff8a5e', 1.6, 55);
+      radialVolley(game, 8, techDamage(p, 30), 480, '#ff8a5e', 1.6, 55);
       camera.shake(4);
     },
   },
@@ -247,7 +248,7 @@ export const ABILITIES = {
           y: p.y + Math.sin(p.angle) * d,
           delay: 0.15 + i * 0.12,
           radius: 100,
-          damage: 45 * effectPower(p),
+          damage: techDamage(p, 45),
         });
       }
       sfx.alarm();
@@ -271,7 +272,12 @@ export const ABILITIES = {
       let kills = 0;
       for (const e of game.entities.enemies.slice()) {
         if (!e.boss && e.hp / e.maxHp < 0.15) {
-          damageEnemy(game, e, e.hp + 1, false, { fromEffect: true });
+          damageEnemy(game, e, e.hp + 1, false, {
+            fromEffect: true,
+            type: DAMAGE_TYPE.TECHNICAL,
+            penetration: p.technicalPenetration ?? 0,
+            bypassResistance: true,
+          });
           kills++;
         }
       }
@@ -314,7 +320,7 @@ export const ABILITIES = {
     use(game, p) {
       p.iframes = Math.max(p.iframes, 0.5);
       const range = 260;
-      const dmg = 55 * effectPower(p);
+      const dmg = techDamage(p, 55);
       for (const e of game.entities.enemies.slice()) {
         const t = (e.x - p.x) * Math.cos(p.angle) + (e.y - p.y) * Math.sin(p.angle);
         if (t < 0 || t > range) continue;
@@ -381,7 +387,7 @@ export function updateAbilityEntities(game, dt) {
   if (p.effects.flags.phaseTrail > 0) {
     p.effects.flags.phaseTrail -= dt;
     for (const e of game.entities.enemies) {
-      if ((e.x - p.x) ** 2 + (e.y - p.y) ** 2 < 50 ** 2) applyBurn(e, 14 * effectPower(p), 2);
+      if ((e.x - p.x) ** 2 + (e.y - p.y) ** 2 < 50 ** 2) applyBurn(e, techDamage(p, 14), 2);
     }
     if (Math.random() < 0.6) spark(game.fx, p.x, p.y, 2, '#ff9f43', 120, 0.3, 2);
     if (p.effects.flags.phaseTrail <= 0) p.effects.flags.phaseTrail = 0;
@@ -398,7 +404,12 @@ export function updateAbilityEntities(game, dt) {
       const angle = Math.atan2(-f.vy, -f.vx);
       game.projectiles.bullets.push({
         x: f.x, y: f.y, vx: -f.vx * 1.2, vy: -f.vy * 1.2, angle,
-        damage: 20 * effectPower(p), crit: false, life: 1.2, pierce: 1, hit: new Set(),
+        damage: techDamage(p, 20), crit: false, life: 1.2, pierce: 1, hit: new Set(),
+        damageSpec: {
+          type: DAMAGE_TYPE.TECHNICAL,
+          penetration: p.technicalPenetration ?? 0,
+          fromEffect: true,
+        },
         homing: 0.6, ricochet: 0, splash: 0, kind: 'bullet', color: '#7ee8ff', r: 4,
       });
     }
@@ -411,7 +422,7 @@ export function updateAbilityEntities(game, dt) {
     p.effects.stormTick = (p.effects.stormTick ?? 0) + dt;
     if (p.effects.stormTick >= 0.5) {
       p.effects.stormTick = 0;
-      chainLightning(game, p.x, p.y, 1, 20 * effectPower(p));
+      chainLightning(game, p.x, p.y, 1, techDamage(p, 20));
     }
     if (p.effects.flags.stormTime <= 0) p.effects.flags.stormTime = 0;
   }
@@ -443,7 +454,12 @@ export function updateAbilityEntities(game, dt) {
         const angle = Math.atan2(target.y - m.y, target.x - m.x);
         game.projectiles.bullets.push({
           x: m.x, y: m.y, vx: Math.cos(angle) * 600, vy: Math.sin(angle) * 600, angle,
-          damage: weaponDamage(p, w) * 0.6, crit: false, life: 1, pierce: 0, hit: new Set(),
+          damage: techDamage(p, w.dmg) * 0.6, crit: false, life: 1, pierce: 0, hit: new Set(),
+          damageSpec: {
+            type: DAMAGE_TYPE.TECHNICAL,
+            penetration: p.technicalPenetration ?? 0,
+            fromEffect: true,
+          },
           homing: 0.7, ricochet: 0, splash: 0, kind: 'bullet', color: '#7ee8ff', r: 3,
         });
         sfx.droneShot();

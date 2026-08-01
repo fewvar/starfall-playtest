@@ -84,6 +84,28 @@
 </section>
 
 <!-- ─────────────── Главное меню ─────────────── -->
+<section id="screen-run-menu" class="screen run-menu-screen" hidden role="dialog" aria-modal="true" aria-labelledby="run-menu-title">
+  <div class="screen-inner run-menu-inner">
+    <header class="run-menu-head">
+      <div>
+        <p class="run-menu-kicker">ПАУЗА · БОРТОВОЙ АРХИВ</p>
+        <h2 id="run-menu-title">ЖУРНАЛ ПОЛЁТА</h2>
+      </div>
+      <button id="btn-run-menu-close" class="btn btn-ghost run-menu-close" type="button" aria-label="Продолжить забег">ПРОДОЛЖИТЬ <kbd>Esc</kbd></button>
+    </header>
+    <nav id="run-menu-tabs" class="run-menu-tabs" role="tablist" aria-label="Разделы журнала"></nav>
+    <div class="run-menu-body">
+      <aside class="run-menu-index" aria-label="Категории бестиария">
+        <div id="run-menu-categories" class="run-menu-categories"></div>
+      </aside>
+      <section class="run-menu-records" aria-label="Записи бестиария">
+        <div id="run-menu-list" class="run-menu-list"></div>
+      </section>
+      <section id="run-menu-detail" class="run-menu-detail" aria-live="polite"></section>
+    </div>
+  </div>
+</section>
+
 <section id="screen-menu" class="screen" hidden>
   <div class="screen-inner menu-inner">
     <h1 class="logo">STARFALL</h1>
@@ -103,7 +125,7 @@
       <div><kbd>мышь</kbd> прицел · <kbd>ЛКМ</kbd> огонь</div>
       <div><kbd>Shift</kbd> форсаж · <kbd>ПКМ</kbd> рывок</div>
       <div><kbd>Q</kbd><kbd>1-5</kbd> смена оружия</div>
-      <div><kbd>Esc</kbd> пауза · <kbd>M</kbd> звук</div>
+      <div><kbd>Esc</kbd> журнал · <kbd>M</kbd> карта · <kbd>N</kbd> звук</div>
     </div>
   </div>
 </section>

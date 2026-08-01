@@ -14,11 +14,15 @@ export function createTurretState() {
 
 /** Разместить турель на месте игрока. Лишняя старая уступает место новой.
  * homing > 0 — ЭВОЛЮЦИЯ «Улей»: турели стреляют самонаводящимися ракетами. */
-export function placeTurret(game, { life, range, damage, rate, color, homing = 0 }) {
+export function placeTurret(game, {
+  life, range, damage, rate, color, homing = 0, damageSpec,
+}) {
   const list = game.turrets;
   if (list.length >= MAX_TURRETS) list.shift();
   const p = game.player;
-  list.push({ x: p.x, y: p.y, life, maxLife: life, range, damage, rate, cd: 0, color, homing });
+  list.push({
+    x: p.x, y: p.y, life, maxLife: life, range, damage, rate, cd: 0, color, homing, damageSpec,
+  });
   sfx.confirm();
 }
 
@@ -40,7 +44,7 @@ export function updateTurrets(game, dt) {
     game.projectiles.bullets.push({
       x: t.x, y: t.y,
       vx: Math.cos(angle) * 640, vy: Math.sin(angle) * 640,
-      angle, damage: t.damage, crit: false, life: 0.9,
+      angle, damage: t.damage, damageSpec: t.damageSpec, crit: false, life: 0.9,
       pierce: 0, hit: new Set(), homing: t.homing, ricochet: 0, splash: 0,
       kind: t.homing > 0 ? 'missile' : 'bullet', color: t.color, r: t.homing > 0 ? 5 : 3,
     });

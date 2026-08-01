@@ -8,8 +8,11 @@ import { applyUpgrade } from './progression.js';
 import { hurtPlayer } from './combat.js';
 import { perkBlast } from './effects.js';
 import { rnd, TAU } from '../core/math.js';
+import { DAMAGE_TYPE } from '../core/damage.js';
 import { nearestWorldImage, torDelta, torDistance } from '../world/torus.js';
 import { CHUNK, locationAt } from '../world/world.js';
+
+const TECHNICAL_DAMAGE = { type: DAMAGE_TYPE.TECHNICAL, penetration: 0, fromEffect: false };
 
 // Безопасные стартовые значения E.2. Они собраны здесь, чтобы плейтест мог
 // менять темп механик без охоты за magic numbers по игровому циклу.
@@ -161,7 +164,9 @@ function updateSeed(game, dt) {
   // Формулировка «отнимает HP» реализована буквально: щит, броня, dash и
   // существующие i-frames не спасают, но стандартные revive/Second Wind остаются.
   hurtPlayer(game, dps * dt, {
-    continuous: true, directHull: true, bypassInvulnerability: true, silent: true,
+    ...TECHNICAL_DAMAGE,
+    continuous: true, directHull: true, bypassResistance: true,
+    bypassInvulnerability: true, silent: true,
   });
 }
 
@@ -370,7 +375,7 @@ export function updateLocationEffects(game, dt) {
     game.run.shockTimer = (game.run.shockTimer ?? m.periodicShock.interval) - dt;
     if (game.run.shockTimer <= 0) {
       game.run.shockTimer = m.periodicShock.interval;
-      hurtPlayer(game, m.periodicShock.damage);
+      hurtPlayer(game, m.periodicShock.damage, TECHNICAL_DAMAGE);
       perkBlast(game, p.x, p.y, 520, m.periodicShock.damage * 1.4, '#7ee8ff');
       floatText(game.fx, p.x, p.y - 40, 'РАЗРЯД', '#7ee8ff');
     }
@@ -403,6 +408,7 @@ export function updateLocationEffects(game, dt) {
     // Ровный environmental damage игнорирует dash/i-frames, но броня и щит
     // остаются честной общей защитой. Запрет лечения задаёт location-policy.
     hurtPlayer(game, LOCATION_SPECIAL_TUNING.acidDps * dt, {
+      ...TECHNICAL_DAMAGE,
       continuous: true, bypassInvulnerability: true, silent: true,
     });
   }

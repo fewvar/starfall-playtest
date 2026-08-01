@@ -1,7 +1,9 @@
 import {
   currentWeapon, weaponDamage, attackSpeedOf, fireInterval,
-  critChance, dodgeChance, armorFactor,
+  critChance, dodgeChance, armorFactor, weaponDamageType,
+  physicalResistance, technicalResistance, penetrationFor,
 } from '../entities/player.js';
+import { DAMAGE_TYPE } from '../core/damage.js';
 import { cardById, RARITY } from '../data/perks.js';
 import { counters, stackBonus } from '../systems/effects.js';
 import { topTags } from '../systems/tags.js';
@@ -31,6 +33,8 @@ function buildGroups(game) {
   const station = p.stationBonuses ?? {};
   const biomeProgress = currentBiomeProgress(game.run);
   const stationPart = (value) => value > 0 ? ` + ${pct(value)} станция` : '';
+  const damageType = weaponDamageType(p);
+  const technicalWeapon = damageType === DAMAGE_TYPE.TECHNICAL;
 
   return [
     {
@@ -39,8 +43,10 @@ function buildGroups(game) {
       title: 'ОРУЖИЕ',
       rows: [
         ['Активный ствол', w.name],
+        ['Тип урона', technicalWeapon ? 'ТЕХНИЧЕСКИЙ' : 'ФИЗИЧЕСКИЙ'],
         ['— база ствола', w.dmg],
-        ['— плоский бонус', p.dmgFlat ? `+${Math.round(p.dmgFlat)}` : '—'],
+        ['— плоский бонус', !technicalWeapon && p.dmgFlat ? `+${Math.round(p.dmgFlat)}` : '—'],
+        ['— RAM', technicalWeapon ? `+${Math.round(p.ram)}` : Math.round(p.ram)],
         ['— сумма процентов', p.dmgAdd ? `+${Math.round(p.dmgAdd * 100)}%` : '—'],
         ['— множители', p.dmgMul !== 1 ? mult(p.dmgMul) : '—'],
         ['Урон снаряда', Math.round(weaponDamage(p, w))],
@@ -51,6 +57,7 @@ function buildGroups(game) {
         ['Шанс крита', `${pct(critChance(p))} (${p.critPoints.toFixed(1)} оч.${stationPart(station.crit)})`],
         ['Урон крита', mult(p.critMul)],
         ['Пробитие целей', p.pierce],
+        ['Пробитие сопротивления', pct(penetrationFor(p, damageType))],
         ['Наведение', p.homingAdd > 0 ? mult(1 + p.homingAdd) : 'нет'],
         ['Рикошеты', p.ricochet || 'нет'],
         ['Взрывные снаряды', p.boomShot || 'нет'],
@@ -65,6 +72,8 @@ function buildGroups(game) {
         ['Щит', p.maxShield > 0 ? `${Math.ceil(p.shield)} / ${Math.round(p.maxShield)}` : 'нет'],
         ['Восстановление щита', p.shieldRegen > 0 ? `${p.shieldRegen.toFixed(1)}/с` : 'нет'],
         ['Броня', p.armorPoints || station.armor ? `−${pct(1 - armorFactor(p))} урона${stationPart(station.armor)}` : 'нет'],
+        ['Физическое сопротивление', `${pct(physicalResistance(p))} (${p.physicalResistPoints.toFixed(1)} оч.)`],
+        ['Техническое сопротивление', `${pct(technicalResistance(p))} (${p.technicalResistPoints.toFixed(1)} оч.)`],
         ['Уклонение', p.dodgePoints || station.dodge ? `${pct(dodgeChance(p))}${stationPart(station.dodge)}` : 'нет'],
         ['Регенерация', p.regen > 0 ? `${p.regen.toFixed(1)} HP/с` : 'нет'],
         ['Вампиризм', p.vamp > 0 ? pct(p.vamp) : 'нет'],

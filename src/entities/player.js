@@ -3,6 +3,9 @@ import { getWeapon, WEAPON_ORDER } from '../data/weapons.js';
 import { hangarById } from '../data/hangar.js';
 import { STATION_CHANCE_LIMITS } from '../data/stations.js';
 import { clamp, hyper, rnd, TAU } from '../core/math.js';
+import {
+  DAMAGE_TYPE, normalizeDamageType, normalizePenetration, resistanceFromPoints,
+} from '../core/damage.js';
 import { createEffectState } from '../systems/effects.js';
 import { addTags, createTagState } from '../systems/tags.js';
 import { healingBlocked } from '../systems/location-policy.js';
@@ -58,6 +61,14 @@ export function createPlayer(save) {
     dmgFlat: ship.dmgFlat ?? 0,
     dmgAdd: ship.dmgAdd ?? 0,
     dmgMul: ship.dmgMul ?? 1,
+    ram: ship.ram ?? 0,
+
+    // Два очка при RESIST_A = 1/18 дают ровно 10% каждого стартового резиста.
+    physicalResistPoints: 2,
+    technicalResistPoints: 2,
+    physicalPenetration: 0,
+    technicalPenetration: 0,
+    weaponDamageType: DAMAGE_TYPE.PHYSICAL,
 
     // темп стрельбы: больше = быстрее, бонусы складываются
     attackSpeed: ship.attackSpeed ?? 1,
@@ -162,9 +173,24 @@ export const currentWeapon = (player) => getWeapon(player.weapon);
 // HUD, панель Tab и боевой код обязаны звать эти функции, а не считать
 // на месте — иначе показанные цифры разъезжаются с фактическим уроном.
 
-/** Слои урона в фиксированном порядке. */
+/** Слои урона в фиксированном порядке; конвертер заменяет dmgFlat на RAM. */
 export const weaponDamage = (player, weapon) =>
-  (weapon.dmg + player.dmgFlat) * (1 + player.dmgAdd) * player.dmgMul;
+  weaponDamageType(player) === DAMAGE_TYPE.TECHNICAL
+    ? techDamage(player, weapon.dmg)
+    : (weapon.dmg + player.dmgFlat) * (1 + player.dmgAdd) * player.dmgMul;
+
+/** Технические источники заменяют плоскую базу оружия характеристикой RAM. */
+export const techDamage = (player, base) =>
+  (base + player.ram) * (1 + player.dmgAdd) * player.dmgMul;
+
+export const weaponDamageType = (player) => normalizeDamageType(player.weaponDamageType);
+export const physicalResistance = (player) => resistanceFromPoints(player.physicalResistPoints);
+export const technicalResistance = (player) => resistanceFromPoints(player.technicalResistPoints);
+export const penetrationFor = (player, type) => normalizePenetration(
+  normalizeDamageType(type) === DAMAGE_TYPE.TECHNICAL
+    ? player.technicalPenetration
+    : player.physicalPenetration,
+);
 
 /** Темп: extra — временные бонусы (стаки «Разгона»), берсерк удваивает. */
 export function attackSpeedOf(player, extra = 0) {

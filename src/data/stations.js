@@ -35,6 +35,10 @@ export const STATION_REWARDS = [
     desc: '+78% урона любого оружия', value: 0.78,
   },
   {
+    id: 'station-ram', stat: 'ram', icon: '▤', name: 'ВЫЧИСЛИТЕЛЬНЫЙ КЛАСТЕР',
+    desc: '+24 RAM для технического урона', value: 24,
+  },
+  {
     id: 'station-rate', stat: 'rate', icon: '⇈', name: 'КРИОКОНТУР',
     desc: '+45% скорости атаки', value: 0.45,
   },

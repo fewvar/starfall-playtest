@@ -29,6 +29,8 @@ export function makeEnemy(x, y, typeId, difficulty = 1, random = Math.random) {
     score: def.score,
     scrap: def.scrap,
     frontShield: !!def.frontShield,
+    physicalResist: def.physicalResist ?? 0,
+    technicalResist: def.technicalResist ?? 0,
     flash: 0,
     wobble: between(TAU),
     freezeUntil: 0,
@@ -94,6 +96,8 @@ export function makeBoss(typeId, x, y, scale = 1) {
     hunting: false,        // босс проснулся: сам идёт за игроком
     cameItself: false,     // пришёл по таймеру — награда за скорость сгорает
     shield: 0,
+    physicalResist: def.physicalResist ?? 0,
+    technicalResist: def.technicalResist ?? 0,
     fromWave: true,
     source: 'wave',
     encounterId: null,

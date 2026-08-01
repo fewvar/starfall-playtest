@@ -1,8 +1,12 @@
 import { angLerp, lerp, rnd, TAU } from '../core/math.js';
-import { hurtPlayer, killEnemy, splitAsteroid } from '../systems/combat.js';
+import { DAMAGE_TYPE } from '../core/damage.js';
+import { damageEnemy, hurtPlayer, killEnemy, splitAsteroid } from '../systems/combat.js';
 import { shootAtPlayer, spawnFoeBullet } from './projectiles.js';
 import { updateBoss } from './bosses.js';
 import { getWeapon } from '../data/weapons.js';
+
+const PHYSICAL_DAMAGE = { type: DAMAGE_TYPE.PHYSICAL, penetration: 0, fromEffect: false };
+const TECHNICAL_DAMAGE = { type: DAMAGE_TYPE.TECHNICAL, penetration: 0, fromEffect: false };
 
 /**
  * Поведение обычных врагов. Тип поведения берётся из поля ai (data/enemies.js):
@@ -172,7 +176,7 @@ export function updateEnemies(game, baseDt) {
 
     // таран корпусом
     if (e.damage > 0 && (p.x - e.x) ** 2 + (p.y - e.y) ** 2 < (p.r + e.r) ** 2) {
-      hurtPlayer(game, e.damage);
+      hurtPlayer(game, e.damage, PHYSICAL_DAMAGE);
       e.vx = -nx * 190;
       e.vy = -ny * 190;
       p.vx += nx * 130;
@@ -180,9 +184,7 @@ export function updateEnemies(game, baseDt) {
       // «Шипы»: столкновение калечит уже врага
       const ram = p.ramDamage + (e.type === 'drone' || e.type === 'weaver' ? 14 : 0);
       if (ram > 0) {
-        e.hp -= ram;
-        e.flash = 0.12;
-        if (e.hp <= 0) killEnemy(game, e);
+        damageEnemy(game, e, ram, false, PHYSICAL_DAMAGE);
       }
     }
   }
@@ -198,7 +200,7 @@ function fireEnemyWeapon(game, e, dx, dy) {
     const count = Math.min(5, w.count ?? 1);
     for (let i = 0; i < count; i++) {
       const off = count === 1 ? 0 : (i - (count - 1) / 2) * (w.spread || 0.12) * 2;
-      spawnFoeBullet(game, e, base + off, 460, e.damage * 0.5, w.color);
+      spawnFoeBullet(game, e, base + off, 460, e.damage * 0.5, w.color, 4, PHYSICAL_DAMAGE);
     }
     return;
   }
@@ -208,29 +210,32 @@ function fireEnemyWeapon(game, e, dx, dy) {
       // короткая очередь из трёх
       e.burst = e.burst > 0 ? e.burst - 1 : 2;
       e.cd = e.burst > 0 ? 0.11 : e.fire;
-      shootAtPlayer(game, e, 480, e.damage * 0.55, e.color);
+      shootAtPlayer(game, e, 480, e.damage * 0.55, e.color, PHYSICAL_DAMAGE);
       break;
     }
     case 'sniper':
       e.cd = e.fire;
-      shootAtPlayer(game, e, 620, e.damage * 1.4, '#c99bff');
+      shootAtPlayer(game, e, 620, e.damage * 1.4, '#c99bff', PHYSICAL_DAMAGE);
       break;
     case 'brute':
       e.cd = e.fire;
-      for (let k = 0; k < 3; k++) shootAtPlayer(game, e, 330, e.damage * 0.6, '#ff8a8a');
+      for (let k = 0; k < 3; k++) shootAtPlayer(game, e, 330, e.damage * 0.6, '#ff8a8a', PHYSICAL_DAMAGE);
       break;
     case 'warden': {
       e.cd = e.fire;
       const base = Math.atan2(dy, dx);
-      for (let k = -1; k <= 1; k++) spawnFoeBullet(game, e, base + k * 0.22, 360, e.damage * 0.5, e.color);
+      for (let k = -1; k <= 1; k++) spawnFoeBullet(game, e, base + k * 0.22, 360, e.damage * 0.5, e.color, 4, PHYSICAL_DAMAGE);
       break;
     }
     case 'splitter':
       e.cd = e.fire;
-      shootAtPlayer(game, e, 380, e.damage * 0.7, e.color);
+      shootAtPlayer(game, e, 380, e.damage * 0.7, e.color, PHYSICAL_DAMAGE);
       break;
     default:
       e.cd = e.fire;
-      shootAtPlayer(game, e, 400, e.damage, '#ffd08a');
+      shootAtPlayer(
+        game, e, 400, e.damage, '#ffd08a',
+        e.type === 'conduit' ? TECHNICAL_DAMAGE : PHYSICAL_DAMAGE,
+      );
   }
 }

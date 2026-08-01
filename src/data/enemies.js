@@ -14,48 +14,48 @@
 export const ENEMIES = {
   drone: {
     id: 'drone', name: 'ДРОН', ai: 'chase', color: '#ff6b8a',
-    hp: 26, r: 13, speed: 175, want: 0, fire: 0, melee: 14,
+    hp: 26, r: 13, speed: 175, want: 0, fire: 0, melee: 14, physicalResist: 0.02, technicalResist: 0.08,
     xp: 2, score: 15, scrap: 1, cost: 1, minWave: 1,
   },
   gunner: {
     id: 'gunner', name: 'СТРЕЛОК', ai: 'keepDistance', color: '#ffb14a',
-    hp: 44, r: 16, speed: 130, want: 280, fire: 1.5, melee: 10,
+    hp: 44, r: 16, speed: 130, want: 280, fire: 1.5, melee: 10, physicalResist: 0.08, technicalResist: 0.04,
     xp: 4, score: 30, scrap: 2, cost: 2, minWave: 1,
   },
   weaver: {
     id: 'weaver', name: 'ТКАЧ', ai: 'weave', color: '#5ef0d0',
-    hp: 30, r: 12, speed: 265, want: 180, fire: 1.2, melee: 12,
+    hp: 30, r: 12, speed: 265, want: 180, fire: 1.2, melee: 12, physicalResist: 0.03, technicalResist: 0.12,
     xp: 4, score: 35, scrap: 2, cost: 2, minWave: 2,
   },
   sniper: {
     id: 'sniper', name: 'СНАЙПЕР', ai: 'keepDistance', color: '#b06bff',
-    hp: 34, r: 15, speed: 105, want: 520, fire: 2.4, melee: 8,
+    hp: 34, r: 15, speed: 105, want: 520, fire: 2.4, melee: 8, physicalResist: 0.05, technicalResist: 0.16,
     xp: 5, score: 40, scrap: 3, cost: 3, minWave: 3,
   },
   mine: {
     id: 'mine', name: 'МИНА', ai: 'mine', color: '#ffe066',
-    hp: 18, r: 11, speed: 26, want: 0, fire: 0, melee: 0,
+    hp: 18, r: 11, speed: 26, want: 0, fire: 0, melee: 0, physicalResist: 0.18, technicalResist: 0.02,
     xp: 2, score: 20, scrap: 1, cost: 1, minWave: 2,
   },
   bomber: {
     id: 'bomber', name: 'БОМБЕР', ai: 'kamikaze', color: '#ff9f43',
-    hp: 52, r: 19, speed: 150, want: 0, fire: 0, melee: 0,
+    hp: 52, r: 19, speed: 150, want: 0, fire: 0, melee: 0, physicalResist: 0.1, technicalResist: 0.05,
     xp: 6, score: 45, scrap: 3, cost: 3, minWave: 4,
   },
   splitter: {
     id: 'splitter', name: 'ДЕЛИТЕЛЬ', ai: 'keepDistance', color: '#e879f9',
-    hp: 58, r: 20, speed: 128, want: 200, fire: 1.7, melee: 14,
+    hp: 58, r: 20, speed: 128, want: 200, fire: 1.7, melee: 14, physicalResist: 0.06, technicalResist: 0.14,
     xp: 6, score: 50, scrap: 3, cost: 3, minWave: 5,
   },
   warden: {
     id: 'warden', name: 'СТРАЖ', ai: 'keepDistance', color: '#4ad9ff',
-    hp: 96, r: 22, speed: 118, want: 240, fire: 1.9, melee: 16,
+    hp: 96, r: 22, speed: 118, want: 240, fire: 1.9, melee: 16, physicalResist: 0.28, technicalResist: 0.08,
     xp: 9, score: 70, scrap: 5, cost: 4, minWave: 6,
     frontShield: true,
   },
   brute: {
     id: 'brute', name: 'БРУТ', ai: 'chase', color: '#ff4a4a',
-    hp: 130, r: 26, speed: 92, want: 60, fire: 1.1, melee: 26,
+    hp: 130, r: 26, speed: 92, want: 60, fire: 1.1, melee: 26, physicalResist: 0.22, technicalResist: 0.04,
     xp: 12, score: 90, scrap: 6, cost: 5, minWave: 7,
   },
 
@@ -63,35 +63,35 @@ export const ENEMIES = {
   // location — появляются только в своей локации (см. availableEnemies)
   crusher: {
     id: 'crusher', name: 'ДРОБИЛЬЩИК', ai: 'chase', color: '#c9955a',
-    hp: 74, r: 25, speed: 138, want: 0, fire: 0, melee: 22,
+    hp: 74, r: 25, speed: 138, want: 0, fire: 0, melee: 22, physicalResist: 0.3, technicalResist: 0.06,
     xp: 8, score: 60, scrap: 4, cost: 4, minWave: 1, location: 'belt',
     special: 'crusher', // крошит астероиды на пути
   },
   phantom: {
     id: 'phantom', name: 'ФАНТОМ', ai: 'keepDistance', color: '#8a7ad0',
-    hp: 34, r: 15, speed: 165, want: 260, fire: 1.6, melee: 10,
+    hp: 34, r: 15, speed: 165, want: 260, fire: 1.6, melee: 10, physicalResist: 0.04, technicalResist: 0.24,
     xp: 6, score: 45, scrap: 3, cost: 3, minWave: 1, location: 'nebula',
     special: 'phantom', // мигает — периодически телепортируется
   },
   marauder: {
     id: 'marauder', name: 'МАРОДЁР', ai: 'chase', color: '#d4c05a',
-    hp: 46, r: 17, speed: 195, want: 0, fire: 0, melee: 16,
+    hp: 46, r: 17, speed: 195, want: 0, fire: 0, melee: 16, physicalResist: 0.14, technicalResist: 0.1,
     xp: 5, score: 40, scrap: 6, cost: 3, minWave: 1, location: 'graveyard',
     special: 'marauder', // рвётся к лут-пикапам раньше игрока
   },
   conduit: {
     id: 'conduit', name: 'ПРОВОДНИК', ai: 'keepDistance', color: '#7ee8ff',
-    hp: 40, r: 16, speed: 118, want: 320, fire: 1.8, melee: 8,
+    hp: 40, r: 16, speed: 118, want: 320, fire: 1.8, melee: 8, physicalResist: 0.02, technicalResist: 0.3,
     xp: 7, score: 50, scrap: 4, cost: 4, minWave: 1, location: 'ionstorm',
   },
   larva: {
     id: 'larva', name: 'ЛИЧИНКА', ai: 'chase', color: '#ff6ba0',
-    hp: 12, r: 9, speed: 205, want: 0, fire: 0, melee: 8,
+    hp: 12, r: 9, speed: 205, want: 0, fire: 0, melee: 8, physicalResist: 0, technicalResist: 0.05,
     xp: 1, score: 10, scrap: 1, cost: 1, minWave: 1, location: 'nest',
   },
   distortion: {
     id: 'distortion', name: 'ИСКАЖЕНИЕ', ai: 'weave', color: '#b06bff',
-    hp: 44, r: 15, speed: 210, want: 160, fire: 1.3, melee: 12,
+    hp: 44, r: 15, speed: 210, want: 160, fire: 1.3, melee: 12, physicalResist: 0.06, technicalResist: 0.28,
     xp: 8, score: 55, scrap: 4, cost: 4, minWave: 1, location: 'rift',
     special: 'distortion', // короткие непредсказуемые телепорты
   },

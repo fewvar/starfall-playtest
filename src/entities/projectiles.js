@@ -1,7 +1,11 @@
 import { angLerp, angDiff, clamp, dist, lerp, rnd } from '../core/math.js';
+import { DAMAGE_TYPE } from '../core/damage.js';
 import { sfx } from '../core/audio.js';
 import { camera } from '../core/camera.js';
-import { currentWeapon, critChance, fireInterval, weaponDamage } from './player.js';
+import {
+  currentWeapon, critChance, fireInterval, penetrationFor, techDamage,
+  weaponDamage, weaponDamageType,
+} from './player.js';
 import { getWeapon } from '../data/weapons.js';
 import { spark, beam, floatText, trail } from './effects.js';
 import { damageEnemy, blastFriendly, splitAsteroid, hurtPlayer, nearestEnemy } from '../systems/combat.js';
@@ -12,6 +16,7 @@ import { placeTurret } from './turrets.js';
 /** Потолок снарядов: дальше кадры важнее, чем ещё пара пуль на экране. */
 const MAX_BULLETS = 340;
 const MAX_FOE_BULLETS = 420;
+const PHYSICAL_DAMAGE = { type: DAMAGE_TYPE.PHYSICAL, penetration: 0, fromEffect: false };
 
 // Сетки перестраиваются раз в кадр и переиспользуются всеми снарядами.
 const enemyGrid = createGrid();
@@ -43,7 +48,14 @@ export function fireWeapon(game, chargeRatio, forceId, dmgMul = 1) {
 
   // Урон: три слоя прокачки × условные множители перков
   // (адреналин, седьмой выстрел, скейлинг) — см. entities/player.js
-  let damage = weaponDamage(p, w) * damageMultiplier(game, { weapon: w }) * dmgMul;
+  const type = weaponDamageType(p);
+  const damageSpec = {
+    type,
+    penetration: penetrationFor(p, type),
+    fromEffect: false,
+  };
+  let damage = (type === DAMAGE_TYPE.TECHNICAL ? techDamage(p, w.dmg) : weaponDamage(p, w))
+    * damageMultiplier(game, { weapon: w, type }) * dmgMul;
   if (w.kind === 'charge') damage *= lerp(w.chargeMinMul ?? 0.25, w.chargeMaxMul ?? 2.5, chargeRatio ?? 1);
 
   let count = w.count + (w.kind === 'beam' || w.kind === 'tether' || w.kind === 'spawner' ? 0 : p.countAdd);
@@ -61,7 +73,7 @@ export function fireWeapon(game, chargeRatio, forceId, dmgMul = 1) {
 
   if (w.kind === 'beam') {
     const sniped = w.id === 'rail' && p.effects.flags.evoSnipe;
-    fireRail(game, damage, (w.range ?? 1200) * p.lifeMul * (sniped ? 1.8 : 1), w.color, sniped);
+    fireRail(game, damage, (w.range ?? 1200) * p.lifeMul * (sniped ? 1.8 : 1), w.color, sniped, damageSpec);
     sfx.rail();
     camera.shake(4);
     return;
@@ -69,7 +81,7 @@ export function fireWeapon(game, chargeRatio, forceId, dmgMul = 1) {
 
   if (w.kind === 'tether') {
     const leech = w.id === 'tether' && p.effects.flags.evoLeech ? 3 : 1;
-    fireTether(game, damage, (w.range ?? 260) * p.lifeMul, w.vamp ?? 0, w.color, leech);
+    fireTether(game, damage, (w.range ?? 260) * p.lifeMul, w.vamp ?? 0, w.color, leech, damageSpec);
     return;
   }
 
@@ -78,13 +90,18 @@ export function fireWeapon(game, chargeRatio, forceId, dmgMul = 1) {
       life: (w.turretLife ?? 8) + (p.turretLifeAdd ?? 0), range: (w.turretRange ?? 380) * p.radiusMul,
       damage: damage, rate: (w.turretRate ?? 0.5) / p.attackSpeed, color: w.color,
       homing: w.id === 'spawner' && p.effects.flags.evoHiveDrone ? 0.8 : 0,
+      damageSpec,
     });
     return;
   }
 
   if (w.kind === 'radial') {
     const novaBoom = w.id === 'radial' && p.effects.flags.evoNovaBoom;
+    const start = game.projectiles.bullets.length;
     radialVolley(game, count, damage, speed, w.color, life, novaBoom ? 70 * p.blastRadiusMul : 0);
+    for (let i = start; i < game.projectiles.bullets.length; i++) {
+      game.projectiles.bullets[i].damageSpec = damageSpec;
+    }
     sfx.boom();
     camera.shake(3);
     return;
@@ -101,6 +118,7 @@ export function fireWeapon(game, chargeRatio, forceId, dmgMul = 1) {
       vy: Math.sin(angle) * speed + p.vy * 0.3,
       angle,
       damage: damage * (crit ? p.critMul : 1),
+      damageSpec,
       crit,
       life,
       pierce: (w.pierce ?? 0) + p.pierce + (w.id === 'scatter' && p.effects.flags.evoLance ? 5 : 0),
@@ -163,7 +181,7 @@ export function fireWeapon(game, chargeRatio, forceId, dmgMul = 1) {
 /** Пиявка: короткий канал вместо дискретного выстрела — тикает, пока держишь кнопку. */
 let tetherTick = 0;
 /** targetCount > 1 — ЭВОЛЮЦИЯ «Жгут»: канал цепляет сразу несколько целей. */
-function fireTether(game, damage, range, vamp, color, targetCount = 1) {
+function fireTether(game, damage, range, vamp, color, targetCount = 1, damageSpec) {
   const p = game.player;
   const crit = Math.random() < critChance(p);
   const total = damage * (crit ? p.critMul : 1);
@@ -176,7 +194,7 @@ function fireTether(game, damage, range, vamp, color, targetCount = 1) {
     hit.add(target);
     anyHit = true;
     const factor = frontShieldFactor(target, p.x, p.y, game);
-    damageEnemy(game, target, total * factor, crit);
+    damageEnemy(game, target, total * factor, crit, damageSpec);
     if (vamp > 0) healPlayer(game, total * vamp);
     beam(game.fx, p.x, p.y, target.x, target.y, color, crit ? 5 : 3);
   }
@@ -186,7 +204,7 @@ function fireTether(game, damage, range, vamp, color, targetCount = 1) {
 }
 
 /** forceCrit — ЭВОЛЮЦИЯ «Снайперская рельса»: луч всегда критует. */
-function fireRail(game, damage, range, color, forceCrit = false) {
+function fireRail(game, damage, range, color, forceCrit = false, damageSpec) {
   const p = game.player;
   const crit = forceCrit || Math.random() < critChance(p);
   const total = damage * (crit ? p.critMul : 1);
@@ -203,7 +221,7 @@ function fireRail(game, damage, range, color, forceCrit = false) {
 
   for (const e of game.entities.enemies.slice()) {
     if (onLine(e, 6)) {
-      damageEnemy(game, e, total * frontShieldFactor(e, p.x, p.y, game), crit);
+      damageEnemy(game, e, total * frontShieldFactor(e, p.x, p.y, game), crit, damageSpec);
       spark(game.fx, e.x, e.y, 5, color, 180, 0.3, 2);
     }
   }
@@ -230,19 +248,19 @@ function frontShieldFactor(enemy, fromX, fromY, game) {
 
 // ─────────────────────────────── снаряды врагов
 
-export function spawnFoeBullet(game, from, angle, speed, damage, color, r = 4) {
+export function spawnFoeBullet(game, from, angle, speed, damage, color, r = 4, damageSpec = PHYSICAL_DAMAGE) {
   game.projectiles.foeBullets.push({
     x: from.x + Math.cos(angle) * (from.r * 0.8),
     y: from.y + Math.sin(angle) * (from.r * 0.8),
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
-    damage, color, r, life: 4,
+    damage, color, r, life: 4, damageSpec,
   });
 }
 
-export function shootAtPlayer(game, enemy, speed, damage, color) {
+export function shootAtPlayer(game, enemy, speed, damage, color, damageSpec = PHYSICAL_DAMAGE) {
   const angle = Math.atan2(game.player.y - enemy.y, game.player.x - enemy.x) + rnd(0.09, -0.09);
-  spawnFoeBullet(game, enemy, angle, speed, damage, color);
+  spawnFoeBullet(game, enemy, angle, speed, damage, color, 4, damageSpec);
   sfx.enemyShot();
 }
 
@@ -306,6 +324,7 @@ function spawnSplitChildren(game, b, excludeHit) {
       x: b.x, y: b.y,
       vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
       angle, damage: b.damage * b.splitDamageMul, crit: false,
+      damageSpec: b.damageSpec,
       life: 0.45, pierce: 0, hit: new Set(excludeHit ? [excludeHit] : []),
       homing: 0, ricochet: 0, splash: 0,
       kind: reSplit ? 'split' : 'bullet',
@@ -363,7 +382,7 @@ function updatePlayerBullets(game, dt) {
     b.life -= dt;
 
     if (b.life <= 0) {
-      if (b.splash) blastFriendly(game, b.x, b.y, b.splash, b.damage * 0.6, b.color);
+      if (b.splash) blastFriendly(game, b.x, b.y, b.splash, b.damage * 0.6, b.color, { damageSpec: b.damageSpec });
       list.splice(i, 1);
       continue;
     }
@@ -387,7 +406,7 @@ function updatePlayerBullets(game, dt) {
 
       const factor = frontShieldFactor(e, b.x, b.y, game);
       if (factor < 1) spark(game.fx, b.x, b.y, 4, '#4ad9ff', 140, 0.25, 2);
-      damageEnemy(game, e, dmgNow * factor, b.crit);
+      damageEnemy(game, e, dmgNow * factor, b.crit, b.damageSpec);
       spark(game.fx, b.x, b.y, 4, b.color, 150, 0.25, 1.6);
       b.hit.add(e);
 
@@ -420,7 +439,7 @@ function updatePlayerBullets(game, dt) {
       }
 
       if (b.splash) {
-        blastFriendly(game, b.x, b.y, b.splash, dmgNow * 0.55, b.color);
+        blastFriendly(game, b.x, b.y, b.splash, dmgNow * 0.55, b.color, { damageSpec: b.damageSpec });
         done = true;
         return true;
       }
@@ -453,7 +472,7 @@ function updatePlayerBullets(game, dt) {
         if (b.kind === 'chain') { done = true; return true; }
 
         if (b.splash) {
-          blastFriendly(game, b.x, b.y, b.splash, dmgNow * 0.55, b.color);
+          blastFriendly(game, b.x, b.y, b.splash, dmgNow * 0.55, b.color, { damageSpec: b.damageSpec });
           done = true;
           return true;
         }
@@ -487,7 +506,7 @@ function updateFoeBullets(game, dt) {
     f.life -= dt;
     if (f.life <= 0) { list.splice(i, 1); continue; }
     if ((p.x - f.x) ** 2 + (p.y - f.y) ** 2 < (p.r + f.r) ** 2) {
-      hurtPlayer(game, f.damage);
+      hurtPlayer(game, f.damage, f.damageSpec);
       list.splice(i, 1);
     }
   }
@@ -498,7 +517,12 @@ export function dropMine(game, { x, y, damageMul = 1 } = {}) {
   const p = game.player;
   game.projectiles.mines.push({
     x: x ?? p.x, y: y ?? p.y, age: 0, r: 8,
-    damage: (22 + 14 * Math.max(1, p.mineDrop)) * (1 + p.dmgAdd) * p.dmgMul * p.mineDamageMul * damageMul,
+    damage: techDamage(p, 22 + 14 * Math.max(1, p.mineDrop)) * p.mineDamageMul * damageMul,
+    damageSpec: {
+      type: DAMAGE_TYPE.TECHNICAL,
+      penetration: penetrationFor(p, DAMAGE_TYPE.TECHNICAL),
+      fromEffect: true,
+    },
   });
 }
 
@@ -520,7 +544,7 @@ function updateMines(game, dt) {
     const near = nearestEnemy(game, m.x, m.y, 74);
     if (near || m.age > 12) {
       if (near) {
-        blastFriendly(game, m.x, m.y, 96 * p.mineRadiusMul, m.damage, '#ffe066');
+        blastFriendly(game, m.x, m.y, 96 * p.mineRadiusMul, m.damage, '#ffe066', { damageSpec: m.damageSpec });
         fireHook(game, 'onMineBlast', { x: m.x, y: m.y });
       }
       mines.splice(i, 1);
@@ -542,7 +566,12 @@ function updateDrones(game) {
       vx: Math.cos(angle) * 720,
       vy: Math.sin(angle) * 720,
       angle,
-      damage: 6 * (1 + p.dmgAdd) * p.dmgMul * p.droneDamageMul * (droneCrit ? p.critMul : 1),
+      damage: techDamage(p, 6) * p.droneDamageMul * (droneCrit ? p.critMul : 1),
+      damageSpec: {
+        type: DAMAGE_TYPE.TECHNICAL,
+        penetration: penetrationFor(p, DAMAGE_TYPE.TECHNICAL),
+        fromEffect: true,
+      },
       crit: droneCrit,
       life: 0.85,
       pierce: 0,

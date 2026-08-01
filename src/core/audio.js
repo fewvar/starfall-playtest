@@ -1,13 +1,21 @@
 /**
- * Весь звук синтезируется на лету через WebAudio — ни одного файла в проекте.
- * Чтобы добавить новый звук, допиши метод в объект sfx.
+ * Эффекты синтезируются через WebAudio, фоновая композиция играет отдельным
+ * media-источником через общий master, поэтому mute и тишина локаций едины.
  */
 
+const MUSIC_GAIN = 0.18;
+const MUSIC_URL = new URL('../../assets/audio/main-loop.mp3', import.meta.url).href;
+const automatedBrowser = () => navigator.webdriver === true;
+const musicProbeRequested = () => new URLSearchParams(location.search).has('music-test');
+
 let ac = null;
-let muted = false;
+// QA-браузеры стартуют полностью беззвучно: не только музыка, но и синтезированные SFX.
+let muted = automatedBrowser();
 let master = null;
 let sfxBus = null;
 let ambientBus = null;
+let musicBus = null;
+let music = null;
 let ambientNodes = [];
 let sceneKey = '';
 
@@ -17,26 +25,51 @@ export function initAudio() {
   if (!Ctx) return;
   ac = new Ctx();
   master = ac.createGain();
-  master.gain.value = 0.9;
+  master.gain.value = muted ? 0 : 0.9;
   master.connect(ac.destination);
   sfxBus = ac.createGain();
   ambientBus = ac.createGain();
+  musicBus = ac.createGain();
   sfxBus.connect(master);
   ambientBus.connect(master);
+  musicBus.connect(master);
   ambientBus.gain.value = 0;
+  musicBus.gain.value = MUSIC_GAIN;
+
+  music = new Audio(MUSIC_URL);
+  music.loop = true;
+  music.preload = 'metadata';
+  // Автоматические браузерные прогоны никогда не выводят звук на устройство.
+  music.muted = automatedBrowser();
+  const musicSource = ac.createMediaElementSource(music);
+  musicSource.connect(musicBus);
 }
 
 export function resumeAudio() {
   initAudio();
   if (ac?.state === 'suspended') ac.resume();
+  if (music?.paused && (!automatedBrowser() || musicProbeRequested())) {
+    music.play().catch(() => { /* следующий жест игрока повторит запуск */ });
+  }
 }
 
 export function toggleMute() {
   muted = !muted;
-  if (master && ac) master.gain.setTargetAtTime(muted ? 0 : 0.9, ac.currentTime, 0.02);
+  // Автоматизированный Chrome нельзя раззвучить даже тестовым нажатием N.
+  if (master && ac) master.gain.setTargetAtTime((muted || automatedBrowser()) ? 0 : 0.9, ac.currentTime, 0.02);
   return muted;
 }
 export const isMuted = () => muted;
+
+/** Узкий read-only статус для QA без доступа к WebAudio-узлам. */
+export const audioState = () => ({
+  initialized: Boolean(ac && music),
+  musicPaused: music?.paused ?? true,
+  musicLoop: music?.loop ?? false,
+  musicMuted: music?.muted ?? false,
+  musicUrl: MUSIC_URL,
+  muted,
+});
 
 /** Короткий тон с опциональным глиссандо. */
 function tone(freq, dur, type = 'square', vol = 0.06, slide = 0) {
@@ -117,6 +150,7 @@ export function setAudioScene({ location = 'open', silent = false, hallucinating
   sceneKey = nextKey;
 
   sfxBus.gain.setTargetAtTime(silent ? 0 : 1, ac.currentTime, 0.025);
+  musicBus.gain.setTargetAtTime(silent ? 0 : MUSIC_GAIN, ac.currentTime, 0.08);
   ambientBus.gain.setTargetAtTime(0, ac.currentTime, 0.04);
   stopAmbient();
   if (silent) return;

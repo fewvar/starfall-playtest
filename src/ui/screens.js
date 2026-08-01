@@ -6,6 +6,7 @@ import { SHIPS, SHIP_ORDER } from '../data/ships.js';
 import { getWeapon } from '../data/weapons.js';
 import { RARITY, PERKS } from '../data/perks.js';
 import { getLocation } from '../data/locations.js';
+import { discoverContent } from '../systems/bestiary.js';
 import { decorateTerms, hideTermTooltip, initTermTooltips } from './terms.js';
 
 /** Все карточки-разблокировки активок, в порядке появления в каталоге. */
@@ -204,6 +205,7 @@ function renderHangar() {
       <div class="ship-stats">
         <span>HP <b>${ship.hp}</b></span>
         <span>ЩИТ <b>${ship.shield}</b></span>
+        <span>RAM <b>${ship.ram}</b></span>
         <span>СКОР <b>${ship.maxSpeed}</b></span>
         <span>СТВОЛ <b>${getWeapon(ship.weapon).name}</b></span>
       </div>
@@ -213,8 +215,12 @@ function renderHangar() {
     decorateTerms(node);
     node.onclick = () => {
       if (owned) {
-        if (meta.selectShip(id)) sfx.select();
+        if (meta.selectShip(id)) {
+          discoverContent('weapons', ship.weapon, true);
+          sfx.select();
+        }
       } else if (meta.buyShip(id)) {
+        discoverContent('weapons', ship.weapon, true);
         sfx.confirm();
       } else {
         sfx.denied();
@@ -282,7 +288,10 @@ function renderAbilities() {
 
     node.querySelector('[data-action="unlock"]').onclick = () => {
       if (unlocked) return;
-      if (meta.buyAbilityUnlock(card.id)) sfx.confirm();
+      if (meta.buyAbilityUnlock(card.id)) {
+        discoverContent('abilities', card.ability, true);
+        sfx.confirm();
+      }
       else { sfx.denied(); flash(node); }
       renderAbilities();
       renderMenuStats();

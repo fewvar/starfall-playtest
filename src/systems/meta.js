@@ -1,7 +1,8 @@
 import { on } from '../core/events.js';
 import {
   loadSave, writeSave, wipeSave, defaultSave,
-  readLegacySave, dropLegacySave,
+  readV3Save, dropV3Save, readLegacySave, dropLegacySave,
+  BESTIARY_CATEGORIES, defaultBestiaryEntry, normalizeBestiary,
 } from '../core/storage.js';
 import { hangarById, upgradeCost } from '../data/hangar.js';
 import { SHIPS } from '../data/ships.js';
@@ -17,6 +18,26 @@ import { WEAPONS } from '../data/weapons.js';
  * а возвращаются обломками — по полной цене, включая корабли.
  * Игрок ничего не теряет и сразу закупается заново под новую систему.
  */
+/**
+ * v3 already has the current economy. Copy all of its fields and add only the
+ * normalized v4 bestiary branch. Keep v3 if localStorage rejects the write.
+ */
+function migrateV3() {
+  const old = readV3Save();
+  if (!old) return null;
+
+  const base = defaultSave();
+  const save = {
+    ...base,
+    ...old,
+    version: base.version,
+    stats: { ...base.stats, ...old.stats },
+    bestiary: normalizeBestiary(old.bestiary),
+  };
+  if (writeSave(save)) dropV3Save();
+  return save;
+}
+
 function migrateLegacy() {
   const old = readLegacySave();
   if (!old) return null;
@@ -34,12 +55,11 @@ function migrateLegacy() {
   save.scrap = refund;
   save.stats = { ...save.stats, ...old.stats };
   save.migrated = true;
-  dropLegacySave();
-  writeSave(save);
+  if (writeSave(save)) dropLegacySave();
   return save;
 }
 
-const freshSave = () => loadSave() ?? migrateLegacy() ?? defaultSave();
+const freshSave = () => loadSave() ?? migrateV3() ?? migrateLegacy() ?? defaultSave();
 
 export const meta = {
   save: freshSave(),
@@ -116,6 +136,43 @@ export const meta = {
 
   weaponUnlocked(id) {
     return this.save.weapons.includes(id) || SHIPS[this.save.ship]?.weapon === id;
+  },
+
+  /** Read-only snapshot; mutations must go through the narrow APIs below. */
+  bestiaryEntry(category, id) {
+    if (!BESTIARY_CATEGORIES.includes(category) || typeof id !== 'string' || !id) return null;
+    const entry = this.save.bestiary?.[category]?.[id] ?? defaultBestiaryEntry();
+    return { ...entry };
+  },
+
+  discoverBestiary(category, id, { unlocked = false } = {}) {
+    if (!BESTIARY_CATEGORIES.includes(category) || typeof id !== 'string' || !id) return false;
+    this.save.bestiary ??= normalizeBestiary({});
+    this.save.bestiary[category] ??= {};
+    const entry = this.save.bestiary[category][id] ??= defaultBestiaryEntry();
+    const changed = !entry.seen || (unlocked && !entry.unlocked);
+    entry.seen = true;
+    if (unlocked) entry.unlocked = true;
+    if (changed) this.persist();
+    return changed;
+  },
+
+  recordBestiaryKill(category, id, unlockAt) {
+    if (!BESTIARY_CATEGORIES.includes(category) || typeof id !== 'string' || !id) return null;
+    if (category !== 'enemies' && category !== 'bosses') return null;
+    this.save.bestiary ??= normalizeBestiary({});
+    this.save.bestiary[category] ??= {};
+    const entry = this.save.bestiary[category][id] ??= defaultBestiaryEntry();
+    entry.seen = true;
+    const kills = Number.isFinite(entry.kills) ? Math.max(0, Math.floor(entry.kills)) : 0;
+    entry.kills = kills + 1;
+    if (Number.isFinite(unlockAt) && entry.kills >= unlockAt) entry.unlocked = true;
+    this.persist();
+    return { ...entry };
+  },
+
+  unlockBestiary(category, id) {
+    return this.discoverBestiary(category, id, { unlocked: true });
   },
 
   // ─────────────────────────────── ангар: активные способности
