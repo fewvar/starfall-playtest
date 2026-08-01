@@ -88,13 +88,31 @@
   <div class="screen-inner run-menu-inner">
     <header class="run-menu-head">
       <div>
-        <p class="run-menu-kicker">ПАУЗА · БОРТОВОЙ АРХИВ</p>
-        <h2 id="run-menu-title">ЖУРНАЛ ПОЛЁТА</h2>
+        <p class="run-menu-kicker">ПАУЗА · БОРТОВАЯ СИСТЕМА</p>
+        <h2 id="run-menu-title">МЕНЮ ЗАБЕГА</h2>
       </div>
       <button id="btn-run-menu-close" class="btn btn-ghost run-menu-close" type="button" aria-label="Продолжить забег">ПРОДОЛЖИТЬ <kbd>Esc</kbd></button>
     </header>
-    <nav id="run-menu-tabs" class="run-menu-tabs" role="tablist" aria-label="Разделы журнала"></nav>
-    <div class="run-menu-body">
+    <nav id="run-menu-tabs" class="run-menu-tabs" role="tablist" aria-label="Разделы меню забега"></nav>
+
+    <section id="run-menu-map" class="run-menu-panel run-menu-map-panel" aria-label="Карта сектора">
+      <canvas id="run-menu-map-canvas" class="run-menu-map-canvas"></canvas>
+      <div id="run-menu-map-unavailable" class="run-menu-unavailable" hidden>
+        <b>НАВИГАЦИЯ НЕДОСТУПНА</b>
+        <span>Ориентируйся по направлению частиц, пока помехи не исчезнут.</span>
+      </div>
+      <p class="run-menu-map-hint">ЛКМ — поставить метку · колесо — масштаб</p>
+    </section>
+
+    <section id="run-menu-stats" class="run-menu-panel run-menu-stats-panel" hidden aria-label="Характеристики забега">
+      <div id="run-menu-stats-columns" class="stats-columns"></div>
+      <div class="stats-modules">
+        <h3 class="section-title">СОБРАННЫЕ МОДУЛИ</h3>
+        <div id="run-menu-stats-modules" class="stats-module-list"></div>
+      </div>
+    </section>
+
+    <div id="run-menu-bestiary" class="run-menu-panel run-menu-body" hidden>
       <aside class="run-menu-index" aria-label="Категории бестиария">
         <div id="run-menu-categories" class="run-menu-categories"></div>
       </aside>
@@ -103,6 +121,27 @@
       </section>
       <section id="run-menu-detail" class="run-menu-detail" aria-live="polite"></section>
     </div>
+
+    <section id="run-menu-control" class="run-menu-panel run-menu-control-panel" hidden aria-label="Управление забегом">
+      <div class="run-menu-control-copy">
+        <p class="run-menu-detail-kicker">УПРАВЛЕНИЕ ЗАБЕГОМ</p>
+        <h3>ПОЛЁТ ПРИОСТАНОВЛЕН</h3>
+        <p>Можно вернуться в бой или завершить текущий забег. При выходе собранные обломки и статистика сохранятся.</p>
+        <div class="run-menu-key-grid">
+          <span><kbd>WASD</kbd> движение</span>
+          <span><kbd>ЛКМ</kbd> огонь</span>
+          <span><kbd>Shift</kbd> форсаж</span>
+          <span><kbd>N</kbd> звук</span>
+          <span><kbd>M</kbd> быстрая карта</span>
+          <span><kbd>Tab</kbd> быстрые характеристики</span>
+        </div>
+      </div>
+      <div class="run-menu-control-actions">
+        <button id="btn-run-menu-resume" class="btn btn-primary" type="button">ПРОДОЛЖИТЬ ЗАБЕГ</button>
+        <button id="btn-run-menu-quit" class="btn btn-danger" type="button">ВЫЙТИ В МЕНЮ</button>
+        <p>Забег будет засчитан. Обломки не пропадут.</p>
+      </div>
+    </section>
   </div>
 </section>
 

@@ -13,13 +13,14 @@ let canvas;
 let ctx;
 let game;
 const view = { zoom: 1, pan: { x: 0, y: 0 } };
+const boundCanvases = new WeakSet();
 
 /** Координаты события мыши в настоящих пикселях canvas, а не в CSS-пикселях. */
-function canvasPoint(event) {
-  const rect = canvas.getBoundingClientRect();
+function canvasPoint(target, event) {
+  const rect = target.getBoundingClientRect();
   return {
-    x: (event.clientX - rect.left) * (canvas.width / rect.width),
-    y: (event.clientY - rect.top) * (canvas.height / rect.height),
+    x: (event.clientX - rect.left) * (target.width / rect.width),
+    y: (event.clientY - rect.top) * (target.height / rect.height),
   };
 }
 
@@ -40,24 +41,39 @@ export function initMapScreen(activeGame) {
   canvas = document.getElementById('map-canvas');
   ctx = canvas.getContext('2d');
 
-  canvas.addEventListener('wheel', (e) => {
+  bindMapCanvas(canvas);
+}
+
+function bindMapCanvas(target) {
+  if (boundCanvases.has(target)) return;
+  boundCanvases.add(target);
+  target.addEventListener('wheel', (e) => {
     e.preventDefault();
-    const point = canvasPoint(e);
-    zoomMapAt(game, view, point.x, point.y, canvas.width, canvas.height, e.deltaY < 0 ? 1.12 : 0.89);
-    redraw();
+    const point = canvasPoint(target, e);
+    zoomMapAt(game, view, point.x, point.y, target.width, target.height, e.deltaY < 0 ? 1.12 : 0.89);
+    redraw(target);
   }, { passive: false });
 
-  canvas.addEventListener('click', (e) => {
+  target.addEventListener('click', (e) => {
     if (!navigationCapabilities(game).waypoint) return;
-    const point = canvasPoint(e);
-    const world = mapScreenToWorld(point.x, point.y, canvas.width, canvas.height, game, view);
+    const point = canvasPoint(target, e);
+    const world = mapScreenToWorld(point.x, point.y, target.width, target.height, game, view);
     const current = game.run.waypoint;
     const clickRadius = 18 / (0.02 * view.zoom);
     const clickedCurrent = current && torDistance(current.x, current.y, world.x, world.y) <= clickRadius;
     game.run.waypoint = clickedCurrent ? null : world;
     sfx.select();
-    redraw();
+    redraw(target);
   });
+}
+
+/** Рисует ту же интерактивную карту в полноэкранный или встроенный canvas. */
+export function renderMapCanvas(target) {
+  bindMapCanvas(target);
+  const rect = target.getBoundingClientRect();
+  target.width = Math.max(1, Math.round(rect.width || window.innerWidth));
+  target.height = Math.max(1, Math.round(rect.height || window.innerHeight));
+  redraw(target);
 }
 
 export function showMap() {
@@ -66,7 +82,7 @@ export function showMap() {
   canvas.height = window.innerHeight;
   canvas.hidden = false;
   document.getElementById('map-hint').hidden = false;
-  redraw();
+  renderMapCanvas(canvas);
   return true;
 }
 
@@ -77,6 +93,7 @@ export function hideMap() {
 
 export const isMapOpen = () => !!canvas && !canvas.hidden;
 
-function redraw() {
-  drawMap(ctx, game, canvas.width, canvas.height, view);
+function redraw(target = canvas) {
+  const targetCtx = target === canvas ? ctx : target.getContext('2d');
+  drawMap(targetCtx, game, target.width, target.height, view);
 }

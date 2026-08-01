@@ -121,8 +121,7 @@ function buildGroups(game) {
   ];
 }
 
-export function renderStats(game) {
-  const columns = document.getElementById('stats-columns');
+export function renderStatsInto(game, columns, list) {
   columns.innerHTML = '';
 
   for (const group of buildGroups(game)) {
@@ -137,7 +136,6 @@ export function renderStats(game) {
     columns.appendChild(box);
   }
 
-  const list = document.getElementById('stats-modules-list');
   list.innerHTML = '';
   const entries = Object.entries(game.player.modules);
   if (!entries.length) {
@@ -156,4 +154,12 @@ export function renderStats(game) {
       `<span class="sm-level">${level}</span>`;
     list.appendChild(node);
   }
+}
+
+export function renderStats(game) {
+  renderStatsInto(
+    game,
+    document.getElementById('stats-columns'),
+    document.getElementById('stats-modules-list'),
+  );
 }

@@ -209,9 +209,11 @@ on('run:allBosses', () => {
 });
 
 function quitToMenu() {
+  const activeRun = !game.run.over && ['playing', 'paused', 'runmenu', 'stats', 'map'].includes(game.state);
   closeStats();
+  hideMap();
   hideRunMenu();
-  if (game.state === 'playing' || game.state === 'paused') {
+  if (activeRun) {
     meta.finishRun(game.run);   // забег засчитывается, обломки не пропадают
     game.run.over = true;
   }
@@ -525,6 +527,8 @@ onPress('tab', () => {
   } else if (game.state === 'stats') {
     statsScreen().hidden = true;
     game.state = 'playing';
+  } else if (game.state === 'runmenu') {
+    showRunMenu('stats');
   }
 });
 
@@ -547,6 +551,8 @@ onPress('m', () => {
   } else if (game.state === 'map') {
     hideMap();
     game.state = 'playing';
+  } else if (game.state === 'runmenu') {
+    showRunMenu('map');
   }
 });
 
@@ -702,7 +708,7 @@ initMeta(game);
 initBestiary();
 initLocations(game);
 initMapScreen(game);
-initRunMenu({ onResume: closeRunMenu });
+initRunMenu({ game, onResume: closeRunMenu, onQuit: quitToMenu });
 initScreens({
   startRun,
   resume,

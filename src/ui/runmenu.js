@@ -1,14 +1,24 @@
 import { bestiaryViewModel } from '../systems/bestiary.js';
+import { navigationCapabilities } from '../systems/location-policy.js';
+import { renderMapCanvas } from './mapscreen.js';
+import { renderStatsInto } from './stats.js';
 
-const TABS = Object.freeze([{ id: 'bestiary', label: 'БЕСТИАРИЙ' }]);
+const TABS = Object.freeze([
+  { id: 'map', label: 'КАРТА' },
+  { id: 'stats', label: 'ХАРАКТЕРИСТИКИ' },
+  { id: 'bestiary', label: 'БЕСТИАРИЙ' },
+  { id: 'control', label: 'УПРАВЛЕНИЕ' },
+]);
 const CATEGORY_LABELS = Object.freeze({
   enemies: 'ВРАГИ', bosses: 'БОССЫ', locations: 'ЛОКАЦИИ',
   weapons: 'ОРУЖИЕ', perks: 'МОДУЛИ', abilities: 'СПОСОБНОСТИ',
 });
 
 let root;
+let game;
 let onResume = () => {};
-let lastTab = 'bestiary';
+let onQuit = () => {};
+let lastTab = 'map';
 let currentCategory = 'enemies';
 let selectedId = null;
 
@@ -160,21 +170,40 @@ function renderDetail(group) {
   }
 }
 
-export function renderRunMenu() {
-  if (!root) return;
-  const groups = bestiaryViewModel();
-  if (!groups.some((group) => group.id === currentCategory)) currentCategory = groups[0]?.id ?? 'enemies';
-  const group = groups.find((item) => item.id === currentCategory);
-  if (selectedId && !group?.entries.some((entry) => entry.id === selectedId)) selectedId = null;
-  renderTabs();
-  renderCategories(groups);
-  renderList(group);
-  renderDetail(group);
+function renderActivePanel() {
+  for (const [id, panel] of Object.entries(root.panels)) panel.hidden = id !== lastTab;
+  root.screen.classList.toggle('detail-open', lastTab === 'bestiary' && Boolean(selectedId));
+
+  if (lastTab === 'map') {
+    const available = navigationCapabilities(game).map;
+    root.mapCanvas.hidden = !available;
+    root.mapUnavailable.hidden = available;
+    if (available) renderMapCanvas(root.mapCanvas);
+  } else if (lastTab === 'stats') {
+    renderStatsInto(game, root.statsColumns, root.statsModules);
+  }
 }
 
-export function initRunMenu({ onResume: resume } = {}) {
+export function renderRunMenu() {
+  if (!root) return;
+  renderTabs();
+  if (lastTab === 'bestiary') {
+    const groups = bestiaryViewModel();
+    if (!groups.some((group) => group.id === currentCategory)) currentCategory = groups[0]?.id ?? 'enemies';
+    const group = groups.find((item) => item.id === currentCategory);
+    if (selectedId && !group?.entries.some((entry) => entry.id === selectedId)) selectedId = null;
+    renderCategories(groups);
+    renderList(group);
+    renderDetail(group);
+  }
+  renderActivePanel();
+}
+
+export function initRunMenu({ game: activeGame, onResume: resume, onQuit: quit } = {}) {
   if (root) return;
+  game = activeGame;
   onResume = resume ?? onResume;
+  onQuit = quit ?? onQuit;
   root = {
     screen: document.getElementById('screen-run-menu'),
     tabs: document.getElementById('run-menu-tabs'),
@@ -182,14 +211,32 @@ export function initRunMenu({ onResume: resume } = {}) {
     list: document.getElementById('run-menu-list'),
     detail: document.getElementById('run-menu-detail'),
     close: document.getElementById('btn-run-menu-close'),
+    mapCanvas: document.getElementById('run-menu-map-canvas'),
+    mapUnavailable: document.getElementById('run-menu-map-unavailable'),
+    statsColumns: document.getElementById('run-menu-stats-columns'),
+    statsModules: document.getElementById('run-menu-stats-modules'),
+    controlResume: document.getElementById('btn-run-menu-resume'),
+    controlQuit: document.getElementById('btn-run-menu-quit'),
+    panels: {
+      map: document.getElementById('run-menu-map'),
+      stats: document.getElementById('run-menu-stats'),
+      bestiary: document.getElementById('run-menu-bestiary'),
+      control: document.getElementById('run-menu-control'),
+    },
   };
   root.close.onclick = closeMenu;
+  root.controlResume.onclick = closeMenu;
+  root.controlQuit.onclick = () => {
+    hideRunMenu();
+    onQuit();
+  };
 }
 
-export function showRunMenu() {
+export function showRunMenu(tab = lastTab) {
   if (!root) return false;
-  renderRunMenu();
+  if (TABS.some((item) => item.id === tab)) lastTab = tab;
   root.screen.hidden = false;
+  renderRunMenu();
   root.close.focus();
   return true;
 }
