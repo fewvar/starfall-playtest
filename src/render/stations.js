@@ -4,6 +4,7 @@ import { STATION_ARENA_RADIUS } from '../data/stations.js';
 import { formatNavigationDistance } from '../systems/navigation.js';
 import { activeStationImage, stationDiscoveryRadius, stationDistance } from '../systems/stations.js';
 import { nearestPointImage } from '../world/torus.js';
+import { npcKindById } from '../data/npcs.js';
 
 /** Кольцо сначала ложится под сущностями, чтобы бой оставался читаемым. */
 export function drawStationArena(ctx, game) {
@@ -158,4 +159,72 @@ export function drawStationSignal(ctx, game, W, H) {
   ctx.textAlign = 'center';
   ctx.fillText(`СТАНЦИЯ · ${formatNavigationDistance(distance)}`, 0, 24);
   ctx.restore();
+}
+
+/**
+ * NPC В МИРЕ. Намеренно НЕ похож на станцию: станция — мёртвый обломок с
+ * тревожным сигналом, NPC — целый маленький кораблик со спокойным огоньком.
+ * Игрок должен различать их с расстояния, не подлетая.
+ */
+export function drawWorldNpcs(ctx, game, visible) {
+  for (const npc of game.run.npcs ?? []) {
+    if (!npc.discovered) continue;
+    const image = nearestPointImage(npc, camera);
+    if (!visible(image, 200)) continue;
+    drawNpc(ctx, image, npc, game.time);
+  }
+}
+
+function drawNpc(ctx, image, npc, time) {
+  const kind = npcKindById[npc.kind];
+  const color = npc.dead ? '#4a4f5c'
+    : npc.status === 'done' ? '#5ef08a'
+      : npc.status === 'failed' ? '#ff3b6b'
+        : kind.color;
+  const pulse = 0.7 + Math.sin(time * 2.4 + npc.angle) * 0.3;
+
+  ctx.save();
+  ctx.translate(image.x, image.y);
+
+  ctx.shadowColor = color;
+  ctx.shadowBlur = npc.dead ? 0 : 20;
+  ctx.globalAlpha = 0.12 + pulse * 0.08;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(0, 0, 110, 0, TAU);
+  ctx.fill();
+
+  ctx.globalAlpha = 1;
+  ctx.rotate(npc.angle + (npc.dead ? 0 : Math.sin(time * 0.6) * 0.12));
+  ctx.shadowBlur = npc.dead ? 0 : 12;
+  ctx.fillStyle = npc.dead ? '#20232c' : '#1a2432';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(24, 0); ctx.lineTo(-12, -17); ctx.lineTo(-4, 0); ctx.lineTo(-12, 17);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  if (!npc.dead) {
+    ctx.fillStyle = color;
+    ctx.globalAlpha = pulse;
+    ctx.beginPath();
+    ctx.arc(6, 0, 4, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Полоса HP появляется только когда NPC уже бьют: молчаливая потеря пути
+  // из-за случайно залетевшей волны — единственное, чего допускать нельзя.
+  if (npc.hp < npc.maxHp && !npc.dead) {
+    ctx.save();
+    ctx.translate(image.x, image.y - 40);
+    ctx.fillStyle = 'rgba(6,10,18,.85)';
+    ctx.fillRect(-30, -4, 60, 7);
+    ctx.fillStyle = npc.hp < npc.maxHp * 0.35 ? '#ff3b6b' : '#ffc14a';
+    ctx.fillRect(-29, -3, 58 * (npc.hp / npc.maxHp), 5);
+    ctx.restore();
+  }
 }

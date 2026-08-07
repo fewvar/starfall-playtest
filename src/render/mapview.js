@@ -5,6 +5,8 @@ import { BOSSES, bossForLocation } from '../data/bosses.js';
 import { hash32 } from '../core/rng.js';
 import { formatNavigationDistance } from '../systems/navigation.js';
 import { hallucinationActive } from '../systems/location-policy.js';
+import { bossCarriesKey, keysTaken, KEY_COUNT } from '../systems/endings.js';
+import { npcKindById, REPUTATION_GOAL } from '../data/npcs.js';
 import {
   WORLD_MIN,
   WORLD_SIZE,
@@ -118,11 +120,55 @@ export function drawMap(ctx, game, W, H, view) {
   }
 
   drawStationMarkers(ctx, game, W, H, view);
+  drawNpcMarkers(ctx, game, W, H, view);
   drawOpenBossMarker(ctx, game, W, H, view);
   drawHome(ctx, game, W, H, view);
   drawWaypoint(ctx, game, W, H, view);
   drawPlayer(ctx, game, W, H, view);
   drawLegend(ctx, game, W, H);
+  drawKeyCounter(ctx, game, W);
+}
+
+/**
+ * NPC на карте: треугольник вместо шестиугольника станции, плюс состояние
+ * услуги цветом. Груз доставки подписан отдельно — иначе, взяв его, игрок
+ * не знает, куда лететь, а вся услуга в этом и состоит.
+ */
+function drawNpcMarkers(ctx, game, W, H, view) {
+  const cargoTo = game.run.cargo?.toId;
+  for (const npc of game.run.npcs ?? []) {
+    if (!npc.discovered) continue;
+    const kind = npcKindById[npc.kind];
+    for (const image of worldImages(npc, game.player)) {
+      const p = toScreen(image.x, image.y, W, H, game, view);
+      if (p.x < -40 || p.x > W + 40 || p.y < -40 || p.y > H + 40) continue;
+      const color = npc.dead ? '#4a4f5c'
+        : npc.service?.done ? '#5ef08a'
+          : npc.service?.failed ? '#ff3b6b'
+            : kind.color;
+
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color + '33';
+      ctx.lineWidth = 1.8;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = npc.id === cargoTo ? 18 : 6;
+      ctx.beginPath();
+      ctx.moveTo(0, -11); ctx.lineTo(10, 8); ctx.lineTo(-10, 8);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.font = '700 10px ui-monospace, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = color;
+      ctx.fillText(npc.dead ? 'ПОГИБ' : kind.name, 0, 22);
+      if (npc.id === cargoTo) {
+        ctx.fillStyle = '#ffe066';
+        ctx.fillText('⊳ ГРУЗ СЮДА', 0, 34);
+      }
+      ctx.restore();
+    }
+  }
 }
 
 /** Станция появляется только после дальнего обнаружения и остаётся до конца забега. */
@@ -271,6 +317,31 @@ function drawRegionLabel(ctx, game, { cl, loc, p, r, visited }) {
     ctx.font = '600 10px ui-monospace, monospace';
     ctx.fillStyle = def.color;
     ctx.fillText(def.name, 0, 22);
+    // ПУТЬ СИЛЫ: у кого из живых боссов ещё лежит ключ. Без этого «собери
+    // десять ключей» превращается в зачистку вслепую (systems/endings.js).
+    if (bossCarriesKey(game.run, bossId)) {
+      ctx.fillStyle = '#ffe066';
+      ctx.fillText('⚷ КЛЮЧ', 0, 34);
+    }
+  }
+  ctx.restore();
+}
+
+/** Счётчик ключей пути СИЛЫ — общий итог поверх карты, а не по меткам. */
+export function drawKeyCounter(ctx, game, W) {
+  const taken = keysTaken(game.run);
+  const rep = game.run.reputation ?? 0;
+  if (!taken && !rep) return;
+  ctx.save();
+  ctx.font = '700 13px ui-monospace, monospace';
+  ctx.textAlign = 'right';
+  if (taken) {
+    ctx.fillStyle = taken >= KEY_COUNT ? '#ffe066' : '#9fb2cc';
+    ctx.fillText(`⚷ КЛЮЧИ ${taken}/${KEY_COUNT}`, W - 18, 26);
+  }
+  if (rep) {
+    ctx.fillStyle = rep >= REPUTATION_GOAL ? '#5ef0d0' : '#9fb2cc';
+    ctx.fillText(`◈ РЕПУТАЦИЯ ${rep}/${REPUTATION_GOAL}`, W - 18, taken ? 46 : 26);
   }
   ctx.restore();
 }

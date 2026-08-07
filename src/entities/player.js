@@ -51,6 +51,7 @@ export function createPlayer(save) {
     weapons: [ship.weapon],
     weapon: ship.weapon,
     fireCooldown: 0,
+    lastShotAt: -1,        // время последнего выстрела — зеркалит ИСКАЖЕНИЕ
     chargeTime: 0, charging: false,   // для «Осадного»: копится, пока зажата кнопка
     multiFire: false,                 // «МУЛЬТИСТВОЛ»: стрелять всеми стволами разом
     weaponCooldowns: {},              // персональный откат каждого ствола при мультистволе

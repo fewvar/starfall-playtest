@@ -6,23 +6,28 @@ import { profiler } from './core/profiler.js';
 
 import { clamp, fmt } from './core/math.js';
 import { createWorld, updateWorld, updateAsteroids } from './world/world.js';
-import { wrapActiveSimulation } from './world/wrap.js?v=818be63';
+import { wrapActiveSimulation } from './world/wrap.js?v=9c1fabf';
 import { createPlayer, updatePlayerMovement, tryDash, selectWeapon, cycleWeapon, currentWeapon, fireInterval } from './entities/player.js';
 import { clearWaypointOnArrival } from './systems/navigation.js';
 import { getWeapon } from './data/weapons.js';
 import { createEffects, updateEffects, clearEffects } from './entities/effects.js';
 import { createProjectiles, updateProjectiles, fireWeapon, clearProjectiles } from './entities/projectiles.js';
-import { updateEnemies } from './entities/enemies.js?v=818be63';
+import { updateEnemies } from './entities/enemies.js?v=9c1fabf';
 import { updatePickups } from './entities/pickups.js';
 import { createTurretState, updateTurrets, clearTurrets } from './entities/turrets.js';
 import { createTelegraphState, updateTelegraphs, clearTelegraphs } from './entities/telegraphs.js';
 
 import { resolveAsteroidHits, hurtPlayer } from './systems/combat.js';
-import { createRun, initWaves, startBiomeWave, updateWaves, nextWave, startBreather, skipBreather, refreshRemaining, BOSS_EVERY } from './systems/waves.js?v=818be63';
+import { createRun, initWaves, startBiomeWave, updateWaves, nextWave, startBreather, skipBreather, refreshRemaining, BOSS_EVERY } from './systems/waves.js?v=9c1fabf';
 import { initProgression, offerLevelUpgrades, offerWaveRewards, applyUpgrade, needsWeaponSwap } from './systems/progression.js';
 import { meta, initMeta } from './systems/meta.js';
 import { discoverContent, initBestiary } from './systems/bestiary.js';
 import { clearHullSeed, initLocations, updateLocationEffects } from './systems/locations.js';
+import { initEndings, canCallFinal, startFinal, finalBossFor } from './systems/endings.js';
+import {
+  initNpcRun, updateNpcs, describeService, acceptService, buyFromNpc, deliverBounty,
+} from './systems/npcs.js';
+import { npcKindById, SHOP_STOCK, REPUTATION_GOAL } from './data/npcs.js';
 import { navigationCapabilities } from './systems/location-policy.js';
 import {
   activateStation,
@@ -32,16 +37,17 @@ import {
   initStationRun,
   updateStations,
 } from './systems/stations.js';
-import { initMapScreen, showMap, hideMap, isMapOpen } from './ui/mapscreen.js?v=818be63';
-import { hideRunMenu, initRunMenu, isRunMenuOpen, showRunMenu } from './ui/runmenu.js?v=818be63';
+import { initMapScreen, showMap, hideMap, isMapOpen } from './ui/mapscreen.js?v=9c1fabf';
+import { hideRunMenu, initRunMenu, isRunMenuOpen, showRunMenu } from './ui/runmenu.js?v=9c1fabf';
 import { updateEffectSystems, useAbility, fireHook, stackBonus, grantAbility } from './systems/effects.js';
 import { createAbilityEntities, updateAbilityEntities, abilityById } from './data/abilities.js';
 import { cardById } from './data/perks.js';
+import { BOSSES } from './data/bosses.js';
 
-import { renderScene, renderMenuBackdrop } from './render/renderer.js?v=818be63';
+import { renderScene, renderMenuBackdrop } from './render/renderer.js?v=9c1fabf';
 import { initHud, updateHud, resetHudCache } from './render/hud.js';
-import { initScreens, showMenu, showHangar, showPause, hideScreens, showCards, showStationConfirm, showWeaponSwap, showVictoryChoice, showGameOver, toast, hideToast, anyScreenOpen } from './ui/screens.js';
-import { renderStats } from './ui/stats.js?v=818be63';
+import { initScreens, showMenu, showHangar, showPause, hideScreens, showCards, showStationConfirm, showBossCall, showNpcConfirm, showNpcScreen, showWeaponSwap, showVictoryChoice, showGameOver, toast, hideToast, anyScreenOpen } from './ui/screens.js';
+import { renderStats } from './ui/stats.js?v=9c1fabf';
 import { initDevPanel } from './ui/devpanel.js';
 
 /**
@@ -76,6 +82,7 @@ export const game = {
   ...createTelegraphState(),        // подсветка зон атак боссов
 };
 initStationRun(game.run);
+initNpcRun(game.run);
 
 // ─────────────────────────────── размеры
 
@@ -126,6 +133,7 @@ function startRun() {
   game.world.chunks.clear();
   game.run = createRun();
   initStationRun(game.run);
+  initNpcRun(game.run);
   game.player.iframes = 2.5;
 
   camera.reset(0, 0);
@@ -442,6 +450,132 @@ on('station:prompt', ({ station }) => {
   );
 });
 
+// ─────────────────────────────── NPC (путь СВЯЗЕЙ)
+
+/** Собирает состояние NPC в готовый для экрана вид — DOM ничего не считает. */
+function npcScreenView(npc) {
+  const run = game.run;
+  const service = describeService(npc);
+  const cargoHere = run.cargo?.fromId === npc.id;
+  const bounty = npc.service.kind === 'bounty';
+  const defend = npc.service.kind === 'defend';
+
+  let text = service.text;
+  let action = 'ВЗЯТЬ';
+  let disabled = false;
+  if (npc.service.done) { text = 'Дело закрыто. Спасибо.'; action = null; }
+  else if (npc.service.failed) { text = service.fail; action = null; }
+  else if (bounty && npc.service.trophy) { text = 'Трофей при тебе — отдать?'; action = 'ОТДАТЬ ТРОФЕЙ'; }
+  else if (npc.status === 'active') {
+    text = cargoHere ? `Груз у тебя. ${service.text}`
+      : defend ? 'Волна уже идёт — не дай меня добить.'
+        : service.text;
+    action = null;
+  } else if (npc.service.kind === 'tribute') {
+    action = `ОТДАТЬ ${npc.service.amount}`;
+    disabled = (run.scrap ?? 0) < npc.service.amount;
+  } else if (npc.service.kind === 'deliver' && run.cargo) {
+    text = 'Трюм занят чужим грузом. Разгрузись сперва.';
+    disabled = true;
+  }
+
+  return {
+    kind: npcKindById[npc.kind],
+    heading: npc.service.done ? 'ДЕЛО ЗАКРЫТО' : npc.service.failed ? 'РАЗГОВОР ОКОНЧЕН' : 'РАЗГОВОР',
+    reputation: run.reputation ?? 0,
+    reputationGoal: REPUTATION_GOAL,
+    scrap: run.scrap ?? 0,
+    service: { name: service.name, text, action, disabled },
+    shop: SHOP_STOCK.map((item) => {
+      const bought = npc.bought?.includes(item.id);
+      return {
+        id: item.id,
+        icon: item.icon,
+        name: item.name,
+        desc: item.desc,
+        label: bought ? 'КУПЛЕНО' : `${item.price} ОБЛОМКОВ`,
+        disabled: bought || (run.scrap ?? 0) < item.price,
+      };
+    }),
+  };
+}
+
+function openNpcScreen(npc) {
+  game.run.npcTalkingId = npc.id;
+  const render = () => showNpcScreen(npcScreenView(npc), {
+    onService: () => {
+      const ok = npc.service.kind === 'bounty' && npc.service.trophy
+        ? deliverBounty(game, npc.id)
+        : acceptService(game, npc.id);
+      sfx[ok ? 'confirm' : 'denied']();
+      render();
+    },
+    onBuy: (itemId) => {
+      sfx[buyFromNpc(game, npc.id, itemId) ? 'confirm' : 'denied']();
+      render();
+    },
+    onClose: () => {
+      game.run.npcTalkingId = null;
+      game.run.npcPromptId = null;
+      npc.promptDismissed = true;
+      sfx.select();
+      closeChoice();
+    },
+  });
+  render();
+}
+
+on('npc:prompt', ({ npc }) => {
+  game.state = 'choosing';
+  releaseAll();
+  hideToast();
+  showNpcConfirm(
+    npc,
+    npcKindById[npc.kind],
+    () => { sfx.select(); openNpcScreen(npc); },
+    () => {
+      npc.promptDismissed = true;
+      game.run.npcPromptId = null;
+      sfx.select();
+      closeChoice();
+    },
+  );
+});
+
+on('npc:discovered', ({ npc }) => {
+  sfx.select();
+  toast('ОБНАРУЖЕН NPC', `${npcKindById[npc.kind].name} · метка сохранена на карте`, 2400);
+});
+
+/**
+ * РАЗВИЛКА РАЗЛОМА. Финал никогда не выпрыгивает сам: пока игрок не сказал
+ * «да», он может летать по Разлому сколько угодно. Отказ помнится до выхода
+ * из локации, чтобы вопрос не задавался каждый кадр.
+ */
+let finalDeclined = false;
+function offerFinalBoss() {
+  if (game.run.location !== 'rift') finalDeclined = false;
+  if (finalDeclined || game.state !== 'playing' || !canCallFinal(game)) return;
+  const def = BOSSES[finalBossFor(game.run)];
+  game.state = 'choosing';
+  releaseAll();
+  hideToast();
+  showBossCall(
+    { kicker: 'РАЗЛОМ ОТКРЫТ', title: 'ИДТИ ДАЛЬШЕ?', name: def.name, line: def.title },
+    () => {
+      startFinal(game);
+      sfx.alarm();
+      closeChoice();
+      toast(def.name, def.hint, 4200);
+    },
+    () => { finalDeclined = true; sfx.select(); closeChoice(); },
+  );
+}
+
+on('npc:collectors', () => {
+  toast('КОЛЛЕКТОРЫ', 'долг не забыт — теперь они будут находить тебя сами', 3000);
+});
+
 on('station:cleared', ({ station, rewards }) => {
   game.state = 'choosing';
   releaseAll();
@@ -639,6 +773,8 @@ function updatePlaying(dt) {
   updateEffects(game.fx, dt);
   updateWaves(game, dt);
   updateStations(game, dt);
+  updateNpcs(game, dt);
+  offerFinalBoss();
   // Станция первой открывает свою награду; одновременный level-up встаёт в очередь.
   updatePickups(game, dt);
 
@@ -707,6 +843,7 @@ initProgression(game);
 initMeta(game);
 initBestiary();
 initLocations(game);
+initEndings(game);
 initMapScreen(game);
 initRunMenu({ game, onResume: closeRunMenu, onQuit: quitToMenu });
 initScreens({

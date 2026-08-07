@@ -116,10 +116,10 @@ function buildCombatPlan(station, seed) {
   return { ...difficulty, roster, spawns };
 }
 
-/** Ровно 5–7 постоянных станций для одного seed. */
+/** Ровно 7–14 постоянных станций для одного seed. */
 export function generateStations(seed) {
   const normalizedSeed = seed >>> 0;
-  const count = 5 + (hash32(normalizedSeed, 0, COUNT_SALT) % 3);
+  const count = 7 + (hash32(normalizedSeed, 0, COUNT_SALT) % 8);
   const candidates = [];
 
   for (let chunkX = WORLD_MIN_CHUNK; chunkX <= WORLD_MAX_CHUNK; chunkX++) {
@@ -202,9 +202,21 @@ export const activeStationImage = (game) => {
 export const stationEnemies = (game, stationId = game.run.stationEncounter?.stationId) =>
   game.entities.enemies.filter((enemy) => enemy.source === 'station' && enemy.encounterId === stationId);
 
+/** Фазы, в которых станцию звать нельзя: идёт бой или открыт экран наград. */
+const STATION_BUSY_PHASES = new Set(['fighting', 'cleared', 'reward']);
+
 export function canActivateStation(game, station) {
   if (!station || station.status === 'active' || station.status === 'reward' || station.status === 'cleared') return false;
-  if (game.run.stationEncounter || game.run.phase !== 'breather') return false;
+  if (game.run.stationEncounter) return false;
+  // Здесь стояло `phase !== 'breather'`, и это молча убивало станции в
+  // открытом космосе. Открытый космос — один биом на всю карту; его пять волн
+  // кончаются в первые минуты, после чего фаза навсегда становится
+  // 'exhausted'. Станция оставалась видимой, маяк на карте горел, а запрос
+  // активации не появлялся уже никогда — и то же самое ждало любой биом,
+  // зачищенный до подлёта к его станции.
+  // Запрещать надо не «не передышку», а настоящую занятость.
+  if (STATION_BUSY_PHASES.has(game.run.phase)) return false;
+  if (game.run.activeBossBiomeId) return false;   // раньше это ловилось случайно, фазой
   if (game.entities.enemies.some((enemy) => enemy.fromWave)) return false;
   return stationDistance(game.player.x, game.player.y, station.x, station.y) <= STATION_ACTIVATION_RADIUS;
 }

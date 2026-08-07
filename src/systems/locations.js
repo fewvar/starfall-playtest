@@ -4,6 +4,8 @@ import { getLocation } from '../data/locations.js';
 import { cardById } from '../data/perks.js';
 import { floatText } from '../entities/effects.js';
 import { meta } from './meta.js';
+import { SECRET_ACHIEVEMENT } from './endings.js';
+import { dropCargo } from './npcs.js';
 import { applyUpgrade } from './progression.js';
 import { hurtPlayer } from './combat.js';
 import { perkBlast } from './effects.js';
@@ -249,6 +251,9 @@ export function enterSingularity(game) {
     y: game.player.y,
   };
   clearHullSeed(game, 'exit');
+  // Груз доставки за пределы карты не выносится: Сингулярность — не место,
+  // откуда что-то возвращают (systems/npcs.js).
+  dropCargo(game, 'singularity');
   clearRealmThreats(game);
   state.gateway = null;
 
@@ -317,6 +322,15 @@ function updateSingularity(game, dt) {
     if (card) applyUpgrade(game, card);
     game.run.singularityPerkTaken = true;
     realm.perk = null;
+    // ПУТЬ ТАЙНЫ: находка запоминается навсегда, а не только на этот забег.
+    // С этого момента карточка появляется в обычном пуле будущих забегов —
+    // и взятая уже ТАМ, открывает третью концовку (systems/endings.js).
+    const fresh = meta.unlockAchievement(SECRET_ACHIEVEMENT);
+    floatText(
+      game.fx, p.x, p.y - 52,
+      fresh ? 'ПУСТОТА ЗАПОМНИЛА ТЕБЯ' : 'ТЕРПЕНИЕ ПУСТОТЫ',
+      '#d8c4ff',
+    );
     emit('location:item', { id: 'singularity_patience' });
   }
 }
@@ -381,6 +395,20 @@ export function updateLocationEffects(game, dt) {
     }
   } else game.run.shockTimer = 0;
 
+  // Лужи, оставшиеся от «Разъедающих» (systems/combat.js). Живут своей
+  // короткой жизнью и гаснут сами, где бы игрок ни находился.
+  const pools = game.run.causticPools;
+  if (pools?.length) {
+    for (let i = pools.length - 1; i >= 0; i--) {
+      const pool = pools[i];
+      pool.life -= dt;
+      if (pool.life <= 0) { pools.splice(i, 1); continue; }
+      if (torDistance(p.x, p.y, pool.x, pool.y) < pool.r + p.r) {
+        hurtPlayer(game, pool.damage * dt, { ...TECHNICAL_DAMAGE, continuous: true });
+      }
+    }
+  }
+
   if (m.gravityPull && Number.isFinite(loc.clusterX)) {
     const range = loc.clusterRadius || 600;
     const dx = torDelta(p.x, loc.clusterX);
@@ -391,6 +419,11 @@ export function updateLocationEffects(game, dt) {
       p.vx += (dx / d) * pull * dt;
       p.vy += (dy / d) * pull * dt;
     }
+  }
+
+  // Порталы — отдельный флаг, а не побочный эффект гравитации: тянет к центру
+  // и Полая Луна, но рвать пространство умеет только Разлом.
+  if (m.riftPortals && Number.isFinite(loc.clusterX)) {
     game.run.portalTimer = (game.run.portalTimer ?? 14) - dt;
     if (game.run.portalTimer <= 0) {
       game.run.portalTimer = 14 + rnd(10);

@@ -1,6 +1,6 @@
 import { on } from '../core/events.js';
 import { ENEMIES, ENEMY_IDS } from '../data/enemies.js';
-import { BOSSES, BOSS_ORDER } from '../data/bosses.js';
+import { BOSSES, ALL_BOSS_ORDER } from '../data/bosses.js';
 import { LOCATIONS, LOCATION_ORDER } from '../data/locations.js';
 import { WEAPONS, WEAPON_ORDER } from '../data/weapons.js';
 import { SHIPS } from '../data/ships.js';
@@ -29,6 +29,10 @@ const ENEMY_DESCRIPTIONS = Object.freeze({
   conduit: 'Ионный стрелок, устойчивый к техническим воздействиям.',
   larva: 'Маленькая и быстрая особь роя, опасная в большой группе.',
   distortion: 'Нестабильная цель Разлома с непредсказуемыми телепортациями.',
+  sprout: 'Оседлый побег Зарослей: стреляет наводящимися семенами с большой дистанции.',
+  caustic: 'Разъедающая особь: на месте гибели остаётся кислотная лужа.',
+  echo: 'Цель Диссонанса, оставляющая за собой безвредные отпечатки — бить нужно по оригиналу.',
+  skimmer: 'Самая быстрая цель в игре: живёт в пылевом шторме и почти не даёт себя вести.',
 });
 
 const category = (id, label, source, order, icon = '◇') => ({
@@ -58,7 +62,7 @@ const perksById = Object.fromEntries(allPerks.map((perk) => [perk.id, perk]));
 /** Stable, UI-neutral catalogue. Raw catalogue definitions are never exposed. */
 export const BESTIARY_REGISTRY = Object.freeze({
   enemies: category('enemies', 'ВРАГИ', ENEMIES, ENEMY_IDS, '◈'),
-  bosses: category('bosses', 'БОССЫ', BOSSES, BOSS_ORDER, '◆'),
+  bosses: category('bosses', 'БОССЫ', BOSSES, ALL_BOSS_ORDER, '◆'),
   locations: category('locations', 'ЛОКАЦИИ', LOCATIONS, LOCATION_ORDER, '✦'),
   weapons: category('weapons', 'ОРУЖИЕ', WEAPONS, WEAPON_ORDER, '↠'),
   perks: category('perks', 'МОДУЛИ', perksById, perkOrder, '◇'),

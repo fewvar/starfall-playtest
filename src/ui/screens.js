@@ -21,6 +21,9 @@ let root = {};
 let actions = {};
 let cardHandler = null;
 let stationConfirmHandler = null;
+let npcConfirmHandler = null;
+let npcScreenHandler = null;
+let bossCallHandler = null;
 
 export function initScreens(handlers) {
   actions = handlers;
@@ -29,6 +32,9 @@ export function initScreens(handlers) {
     hangar: document.getElementById('screen-hangar'),
     cards: document.getElementById('screen-cards'),
     station: document.getElementById('screen-station-confirm'),
+    npcConfirm: document.getElementById('screen-npc-confirm'),
+    bossCall: document.getElementById('screen-boss-call'),
+    npc: document.getElementById('screen-npc'),
     swap: document.getElementById('screen-weapon-swap'),
     victory: document.getElementById('screen-victory'),
     pause: document.getElementById('screen-pause'),
@@ -71,6 +77,27 @@ export function initScreens(handlers) {
       }
       return;
     }
+    if (!root.bossCall.hidden) {
+      if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+        e.preventDefault();
+        bossCallHandler?.confirm?.();
+      } else if (e.code === 'Escape') {
+        e.preventDefault();
+        bossCallHandler?.decline?.();
+      }
+      return;
+    }
+    if (!root.npcConfirm.hidden || !root.npc.hidden) {
+      const handler = root.npcConfirm.hidden ? npcScreenHandler : npcConfirmHandler;
+      if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+        e.preventDefault();
+        handler?.confirm?.();
+      } else if (e.code === 'Escape') {
+        e.preventDefault();
+        handler?.decline?.();
+      }
+      return;
+    }
     const index = {
       Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3,
       Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3,
@@ -93,6 +120,12 @@ function hideAll() {
   root.hangar.hidden = true;
   root.cards.hidden = true;
   root.station.hidden = true;
+  root.npcConfirm.hidden = true;
+  root.npc.hidden = true;
+  root.bossCall.hidden = true;
+  bossCallHandler = null;
+  npcConfirmHandler = null;
+  npcScreenHandler = null;
   root.swap.hidden = true;
   root.victory.hidden = true;
   root.pause.hidden = true;
@@ -101,6 +134,7 @@ function hideAll() {
 
 export const anyScreenOpen = () =>
   !(root.menu.hidden && root.hangar.hidden && root.cards.hidden && root.station.hidden && root.swap.hidden
+    && root.npcConfirm.hidden && root.npc.hidden && root.bossCall.hidden
     && root.victory.hidden && root.pause.hidden && root.over.hidden);
 
 export function showMenu() {
@@ -141,6 +175,85 @@ export function showPause() {
 export function hideScreens() {
   hideAll();
   root.hud.classList.remove('dimmed');
+}
+
+/**
+ * ВЫЗОВ БОССА. Станция кричит «выхода нет» — здесь наоборот: спокойный
+ * вопрос, на который можно ответить «пока нет» и вернуться позже. Босс
+ * никогда не приходит сам по себе, его всегда зовут (Notes §5).
+ */
+export function showBossCall(view, onCall, onWait) {
+  hideAll();
+  document.getElementById('boss-call-kicker').textContent = view.kicker;
+  document.getElementById('boss-call-title').textContent = view.title;
+  document.getElementById('boss-call-name').textContent = view.name;
+  document.getElementById('boss-call-line').textContent = view.line;
+  document.getElementById('btn-boss-call').onclick = onCall;
+  document.getElementById('btn-boss-wait').onclick = onWait;
+  bossCallHandler = { confirm: onCall, decline: onWait };
+  root.bossCall.hidden = false;
+  root.hud.classList.add('dimmed');
+  document.getElementById('btn-boss-wait').focus();
+}
+
+/**
+ * РАЗГОВОР С NPC — тот же каркас, что у станции, но без тревоги: станция
+ * запирает арену, а NPC просто предлагает дело, и путать одно с другим
+ * игрок не должен (Notes/PLAYTEST_NOTES_2.md §5, «тихий оверлей»).
+ */
+export function showNpcConfirm(npc, kind, onTalk, onLeave) {
+  hideAll();
+  const location = getLocation(npc.locationId);
+  document.getElementById('npc-confirm-kind').textContent = `${kind.icon} ${kind.name}`;
+  document.getElementById('npc-confirm-location').textContent =
+    `${location.name} · УРОВЕНЬ ${npc.recommendedLevel}`;
+  document.getElementById('npc-confirm-line').textContent = kind.line;
+  document.getElementById('btn-npc-talk').onclick = onTalk;
+  document.getElementById('btn-npc-leave').onclick = onLeave;
+  npcConfirmHandler = { confirm: onTalk, decline: onLeave };
+  root.npcConfirm.hidden = false;
+  root.hud.classList.add('dimmed');
+  document.getElementById('btn-npc-talk').focus();
+}
+
+/**
+ * Экран NPC: одна услуга и его товар. Услуга у каждого NPC ровно одна —
+ * список дел вместо разговора превратил бы карту в доску заданий.
+ */
+export function showNpcScreen(view, handlers) {
+  hideAll();
+  document.getElementById('npc-title').textContent = `${view.kind.icon} ${view.kind.name}`;
+  document.getElementById('npc-heading').textContent = view.heading;
+  document.getElementById('npc-reputation').textContent =
+    `РЕПУТАЦИЯ ${view.reputation}/${view.reputationGoal} · ОБЛОМКОВ ${fmt(view.scrap)}`;
+
+  const service = document.getElementById('npc-service');
+  service.innerHTML = `<h3>${view.service.name}</h3><p>${view.service.text}</p>`;
+  if (view.service.action) {
+    const button = document.createElement('button');
+    button.className = 'btn';
+    button.textContent = view.service.action;
+    button.disabled = !!view.service.disabled;
+    button.onclick = () => handlers.onService();
+    service.appendChild(button);
+  }
+
+  const shop = document.getElementById('npc-shop');
+  shop.innerHTML = '';
+  for (const item of view.shop) {
+    const button = document.createElement('button');
+    button.disabled = item.disabled;
+    button.innerHTML =
+      `<b>${item.icon} ${item.name}</b><span>${item.desc}</span><i>${item.label}</i>`;
+    button.onclick = () => handlers.onBuy(item.id);
+    shop.appendChild(button);
+  }
+
+  document.getElementById('btn-npc-close').onclick = handlers.onClose;
+  npcScreenHandler = { decline: handlers.onClose };
+  root.npc.hidden = false;
+  root.hud.classList.add('dimmed');
+  document.getElementById('btn-npc-close').focus();
 }
 
 /** Явное подтверждение обязательно: после запуска покинуть арену уже нельзя. */

@@ -48,20 +48,40 @@ function candidatePool(seed, salt) {
   return out.sort((a, b) => a.rank - b.rank || a.chunkX - b.chunkX || a.chunkY - b.chunkY);
 }
 
-function typeForLevel(level, seed, index) {
-  const candidates = Object.values(LOCATIONS).filter((loc) => {
-    const placement = loc.placement;
-    return placement?.kind === 'normal' && level >= placement.minLevel && level <= placement.maxLevel;
-  });
-  if (!candidates.length) throw new Error(`No normal location type supports level ${level}`);
-  const random = rngAt(index, level, seed + TYPE_SALT);
-  let total = candidates.reduce((sum, loc) => sum + (loc.placement.weight ?? 1), 0);
+function weightedType(candidates, random) {
+  const total = candidates.reduce((sum, loc) => sum + (loc.placement.weight ?? 1), 0);
   let roll = random() * total;
   for (const loc of candidates) {
     roll -= loc.placement.weight ?? 1;
     if (roll <= 0) return loc.id;
   }
   return candidates[candidates.length - 1].id;
+}
+
+/**
+ * Тип области для слота этого уровня.
+ *
+ * Слотов тринадцать, типов десять — повторы неизбежны, но они должны быть
+ * ОСТАТКОМ, а не правилом. Раньше каждый слот тянул тип независимо, и в
+ * среднем 1.75 типа из девяти на карту вообще не попадали: вместе с ними
+ * пропадали их боссы, то есть «убей всех боссов» на большинстве сидов было
+ * физически невыполнимо.
+ *
+ * Поэтому сначала берём типы, которых на карте ещё нет, и среди них — тот,
+ * у кого окно уровней закрывается раньше всех. Иначе узкие типы (у Пояса
+ * окно 2-3) вытесняются широкими и до карты не доезжают всё равно.
+ */
+function typeForLevel(level, seed, index, used) {
+  const candidates = Object.values(LOCATIONS).filter((loc) => {
+    const placement = loc.placement;
+    return placement?.kind === 'normal' && level >= placement.minLevel && level <= placement.maxLevel;
+  });
+  if (!candidates.length) throw new Error(`No normal location type supports level ${level}`);
+  const random = rngAt(index, level, seed + TYPE_SALT);
+  const fresh = candidates.filter((loc) => !used.has(loc.id));
+  if (!fresh.length) return weightedType(candidates, random);
+  const soonest = Math.min(...fresh.map((loc) => loc.placement.maxLevel));
+  return weightedType(fresh.filter((loc) => loc.placement.maxLevel === soonest), random);
 }
 
 function record(candidate, { id, biomeId, type, recommendedLevel, placementKind }) {
@@ -119,11 +139,13 @@ function generate(seed) {
       recommendedLevel: LOCATIONS.rift.recommendedLevel, placementKind: 'wildcardFinal',
     });
     const placed = [start, rift];
+    const usedTypes = new Set();
     let failed = false;
 
     for (let index = 0; index < NORMAL_LEVELS.length; index++) {
       const level = NORMAL_LEVELS[index];
-      const type = typeForLevel(level, normalizedSeed, index);
+      const type = typeForLevel(level, normalizedSeed, index, usedTypes);
+      usedTypes.add(type);
       const candidate = pool.find((point) => {
         const next = { ...point, recommendedLevel: level, placementKind: 'normal' };
         if (!nonOverlapping(next, placed)) return false;

@@ -20,6 +20,15 @@ function moveBossMemory(enemy, dx, dy) {
     'beaconBlinkTo', 'crossAt',
   ]) movePoint(enemy[key], dx, dy);
   moveLine(enemy.pulseLine, dx, dy);
+  // memo активной связки: точка, в которой была зафиксирована геометрия удара.
+  // Если её не сдвинуть, на шве связка ударит по старым координатам, а телеграф
+  // (он в общем списке выше) уже уедет — подсветка разойдётся с ударом.
+  const memo = enemy.string?.memo;
+  if (memo) {
+    movePoint(memo, dx, dy);
+    moveLine(memo, dx, dy);
+    for (const point of memo.points ?? []) movePoint(point, dx, dy);
+  }
   for (const line of enemy.crossLines ?? []) moveLine(line, dx, dy);
   for (const node of enemy.nodes ?? []) movePoint(node, dx, dy);
   for (const pool of enemy.acidPools ?? []) movePoint(pool, dx, dy);
@@ -28,8 +37,12 @@ function moveBossMemory(enemy, dx, dy) {
 function moveDecor(decor, dx, dy) {
   if (!decor) return;
   movePoint(decor, dx, dy);
-  for (const key of ['dust', 'clouds', 'wrecks', 'nodes', 'pods']) {
-    for (const item of decor[key] ?? []) movePoint(item, dx, dy);
+  // Перебираем ЛЮБЫЕ массивы декора, а не список ключей: список приходилось
+  // дополнять с каждым новым биомом, и забытый ключ (лианы Зарослей, жилы
+  // Диссонанса) молча оставлял декор висеть на старом месте после шва.
+  for (const value of Object.values(decor)) {
+    if (!Array.isArray(value)) continue;
+    for (const item of value) movePoint(item, dx, dy);
   }
 }
 

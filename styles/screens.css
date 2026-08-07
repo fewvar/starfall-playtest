@@ -856,3 +856,67 @@
   display: block;
   color: #c7dcf8;
 }
+
+/* ── NPC: тот же каркас, что у станции, но спокойный тон ───────────── */
+/* Станция кричит красным «выхода нет»; разговор с NPC не должен пугать —
+   отличается ровно палитрой и подписями, чтобы игрок не путал одно с другим. */
+#screen-npc-confirm,
+#screen-npc {
+  background:
+    radial-gradient(circle at 50% 45%, rgba(94, 240, 208, 0.14), transparent 34%),
+    rgba(3, 6, 14, 0.9);
+}
+.npc-panel {
+  background: linear-gradient(180deg, rgba(14, 30, 30, 0.96), rgba(8, 13, 25, 0.97));
+  border: 1px solid rgba(94, 240, 208, 0.5);
+  box-shadow: 0 0 calc(70px * var(--ui)) rgba(94, 240, 208, 0.14), inset 0 0 calc(45px * var(--ui)) rgba(126, 232, 255, 0.05);
+}
+.npc-panel-wide { width: min(calc(840px * var(--ui)), 94vw); }
+.npc-panel .station-kicker { color: #5ef0d0; }
+.npc-panel h2 { text-shadow: 0 0 calc(30px * var(--ui)) rgba(94, 240, 208, 0.5); }
+.npc-line {
+  margin-top: calc(20px * var(--ui));
+  color: var(--ink-dim);
+  font-size: var(--fs-base);
+  line-height: 1.65;
+  font-style: italic;
+}
+.npc-service {
+  margin-top: calc(22px * var(--ui));
+  padding: calc(16px * var(--ui));
+  text-align: left;
+  border: 1px solid rgba(94, 240, 208, 0.28);
+  background: rgba(94, 240, 208, 0.05);
+}
+.npc-service h3 {
+  color: #5ef0d0;
+  font-size: var(--fs-small);
+  letter-spacing: calc(3px * var(--ui));
+}
+.npc-service p {
+  margin-top: calc(8px * var(--ui));
+  color: var(--ink-dim);
+  font-size: var(--fs-base);
+  line-height: 1.6;
+}
+.npc-service .btn { margin-top: calc(14px * var(--ui)); }
+.npc-shop {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(calc(230px * var(--ui)), 1fr));
+  gap: calc(10px * var(--ui));
+  margin-top: calc(18px * var(--ui));
+}
+.npc-shop button {
+  padding: calc(12px * var(--ui));
+  text-align: left;
+  color: var(--ink);
+  background: rgba(255, 193, 74, 0.06);
+  border: 1px solid rgba(255, 193, 74, 0.3);
+  cursor: pointer;
+  font: inherit;
+}
+.npc-shop button:hover:not(:disabled) { background: rgba(255, 193, 74, 0.14); }
+.npc-shop button:disabled { opacity: 0.4; cursor: default; }
+.npc-shop b { display: block; color: #ffc14a; font-size: var(--fs-small); }
+.npc-shop span { display: block; margin-top: calc(6px * var(--ui)); color: var(--ink-dim); font-size: var(--fs-tiny); line-height: 1.5; }
+.npc-shop i { display: block; margin-top: calc(6px * var(--ui)); color: #ffc14a; font-style: normal; font-size: var(--fs-tiny); }

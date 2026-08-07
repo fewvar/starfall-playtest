@@ -209,24 +209,41 @@ function syncWeapons(p) {
   });
 }
 
+// К поздней игре модулей набирается три-четыре десятка, и полный ряд плашек
+// съедал нижнюю половину экрана. В бою нужен не список, а напоминание, поэтому
+// в HUD остаётся только верхушка билда, а полный состав живёт на экране Tab.
+const CHIP_LIMIT = 6;
+const CHIP_RANK = { cursed: 4, legendary: 3, epic: 2, rare: 1, common: 0 };
+
+/**
+ * Верхушка билда: сперва редкость, потом уровень. Проклятые идут первыми
+ * намеренно — про их минус игрок обязан помнить, даже если модуль первого
+ * уровня. Порядок внутри одной редкости и уровня — порядок взятия.
+ */
+function visibleChips(chips) {
+  if (chips.length <= CHIP_LIMIT) return { shown: chips, hidden: 0 };
+  const ranked = chips
+    .map((c, index) => ({ c, index }))
+    .sort((a, b) =>
+      (CHIP_RANK[b.c.rarity] ?? 0) - (CHIP_RANK[a.c.rarity] ?? 0)
+      || b.c.level - a.c.level
+      || a.index - b.index);
+  const shown = ranked.slice(0, CHIP_LIMIT).sort((a, b) => a.index - b.index).map((e) => e.c);
+  return { shown, hidden: chips.length - CHIP_LIMIT };
+}
+
 function syncChips(p) {
-  const chips = moduleChips(p);
+  const { shown, hidden } = visibleChips(moduleChips(p));
   // стаки показываем отдельно: они меняются в бою и должны обновляться
   const momentum = stackCount(p, 'momentum');
   const greed = stackCount(p, 'greed');
-  const key = chips.map((c) => c.name + c.level).join(',') + `|${momentum}|${greed}`;
+  const key = shown.map((c) => c.name + c.level).join(',') + `|${hidden}|${momentum}|${greed}`;
   if (key === lastChips) return;
   lastChips = key;
 
   el.chips.innerHTML = '';
-  for (const c of chips) {
-    const node = document.createElement('div');
-    node.className = 'chip rarity-' + (c.rarity ?? 'common');
-    node.style.setProperty('--chip-color', RARITY[c.rarity]?.color ?? RARITY.common.color);
-    node.innerHTML = `${c.icon} ${c.name} <b>${c.level}</b>`;
-    decorateTerms(node);
-    el.chips.appendChild(node);
-  }
+  // Стаки идут первыми: они единственные меняются посреди боя, и их читают
+  // на бегу — значит им нужно постоянное место, а не хвост плавающей длины.
   if (momentum > 0) {
     const node = document.createElement('div');
     node.className = 'chip stack';
@@ -239,6 +256,20 @@ function syncChips(p) {
     node.className = 'chip stack';
     node.innerHTML = `¤ АЗАРТ <b>×${greed}</b>`;
     decorateTerms(node);
+    el.chips.appendChild(node);
+  }
+  for (const c of shown) {
+    const node = document.createElement('div');
+    node.className = 'chip rarity-' + (c.rarity ?? 'common');
+    node.style.setProperty('--chip-color', RARITY[c.rarity]?.color ?? RARITY.common.color);
+    node.innerHTML = `${c.icon} ${c.name} <b>${c.level}</b>`;
+    decorateTerms(node);
+    el.chips.appendChild(node);
+  }
+  if (hidden > 0) {
+    const node = document.createElement('div');
+    node.className = 'chip more';
+    node.innerHTML = `<b>+${hidden}</b> ЕЩЁ <i>TAB</i>`;
     el.chips.appendChild(node);
   }
 }

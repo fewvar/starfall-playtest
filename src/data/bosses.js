@@ -1,5 +1,6 @@
 /**
- * ДЕСЯТЬ БОССОВ. Поведение — в entities/bosses.js (updateBoss, ветка по id).
+ * ОДИННАДЦАТЬ ОБЫЧНЫХ БОССОВ + ТРИ ФИНАЛА.
+ * Поведение — в entities/bosses.js (updateBoss, ветка по id).
  *
  * HP ФИКСИРОВАННОЕ и от волны не зависит вообще (в отличие от обычных врагов,
  * см. systems/waves.js:enemyHpScale). В основном режиме каждый босс живёт у
@@ -68,34 +69,84 @@ export const BOSSES = {
   hive: {
     id: 'hive', name: 'МАТКА РОЯ', title: 'ИНКУБАТОР ПРОСНУЛСЯ',
     location: 'nest', order: 8,
-    hp: 57000, r: 58, speed: 70, color: '#e879f9', physicalResist: 0.16, technicalResist: 0.3,
+    // не сиреневый: #e879f9 совпадал с частицами опыта, и спираль снарядов
+    // Матки читалась как безобидный лут прямо в лицо
+    hp: 57000, r: 58, speed: 70, color: '#ff7043', physicalResist: 0.16, technicalResist: 0.3,
     score: 2600, xp: 95, scrap: 85,
     hint: 'Спираль снарядов и непрерывный выводок. На последней фазе делится на три.',
   },
+  hollow_moon: {
+    id: 'hollow_moon', name: 'ПОЛАЯ ЛУНА', title: 'МЁРТВЫЙ СПУТНИК ОТКРЫЛ ГЛАЗА',
+    location: 'hollow_moon', order: 9,
+    hp: 82000, r: 74, speed: 54, color: '#c9d6ea', physicalResist: 0.24, technicalResist: 0.24,
+    score: 2700, xp: 100, scrap: 90,
+    hint: 'Тянет к себе и корабль, и твои снаряды. Растёт, наливается метеоритами и гаснет затмением.',
+  },
   false_beacon: {
     id: 'false_beacon', name: 'ЛОЖНЫЙ МАЯК', title: 'ДИССОНАНС НАШЁЛ ТОЧКУ ОТСЧЁТА',
-    location: 'dissonance', order: 9,
-    hp: 72000, r: 58, speed: 132, color: '#ff79c6', physicalResist: 0.3, technicalResist: 0.3,
+    location: 'dissonance', order: 10,
+    hp: 88000, r: 58, speed: 132, color: '#ff79c6', physicalResist: 0.3, technicalResist: 0.3,
     score: 2850, xp: 105, scrap: 95,
     hint: 'Фиксирует линии импульсов, скачет в отмеченную точку и замыкает честный крестовой залп.',
   },
   distortion: {
     id: 'distortion', name: 'ИСКАЖЕНИЕ', title: 'РАЗЛОМ СМОТРИТ ТВОИМ ЛИЦОМ',
-    location: 'rift', order: 10,
-    hp: 90000, r: 50, speed: 150, color: '#b06bff', physicalResist: 0.18, technicalResist: 0.38,
+    location: 'rift', order: 11,
+    hp: 108000, r: 50, speed: 150, color: '#b06bff', physicalResist: 0.18, technicalResist: 0.38,
     score: 3200, xp: 120, scrap: 110,
     hint: 'Стреляет твоим же стволом. Телепортируется, а в конце выпускает твою копию.',
   },
+
+  /*
+   * ТРИ ФИНАЛА. Живут не у метки локации, а за развилкой Разлома, и каждый
+   * привязан к своему пути (systems/endings.js). Поэтому final: true —
+   * они не участвуют в обычной ротации, не несут ключей (ключ понадобился
+   * бы для доступа к самому себе) и не входят в ступени силы.
+   */
+  legion: {
+    id: 'legion', name: 'ЛЕГИОН', title: 'ВСЕ, КОГО ТЫ ПРОШЁЛ, СОБРАЛИСЬ В ОДНО',
+    location: null, order: 12, final: true, path: 'force',
+    hp: 145000, r: 68, speed: 128, color: '#ff5f7a', physicalResist: 0.26, technicalResist: 0.26,
+    score: 4200, xp: 160, scrap: 160,
+    hint: 'Ты уже видел каждое его движение — но не все сразу и не в таком порядке.',
+  },
+  judgment: {
+    id: 'judgment', name: 'СУД', title: 'ТЕБЯ ЖДАЛИ. НЕ ЗА НАГРАДОЙ',
+    location: null, order: 13, final: true, path: 'bonds',
+    hp: 132000, r: 60, speed: 140, color: '#8fe0c0', physicalResist: 0.22, technicalResist: 0.34,
+    score: 4200, xp: 160, scrap: 160,
+    hint: 'Всё, что выглядит как помощь, здесь бьёт. Кроме одного раза.',
+  },
+  voice: {
+    id: 'voice', name: 'ГОЛОС ПУСТОТЫ', title: 'ОНО НЕ ИМЕЕТ ФОРМЫ. СЕГОДНЯ — ИМЕЕТ',
+    location: null, order: 14, final: true, path: 'secret',
+    hp: 138000, r: 56, speed: 120, color: '#9aa4c4', physicalResist: 0.28, technicalResist: 0.28,
+    score: 4200, xp: 160, scrap: 160,
+    hint: 'В этом забеге у него три атаки. В следующем будут другие три.',
+  },
 };
 
-/** Порядок ступеней силы, победного набора и endless-ротации. */
-export const BOSS_ORDER = Object.values(BOSSES)
+const sortedIds = (filter) => Object.values(BOSSES)
+  .filter(filter)
   .sort((a, b) => a.order - b.order)
   .map((b) => b.id);
 
+/** Порядок ступеней силы, ключей и endless-ротации. Финалы сюда не входят. */
+export const BOSS_ORDER = sortedIds((b) => !b.final);
+
+/** Три финала — отдельным списком, по одному на путь к концовке. */
+export const FINAL_ORDER = sortedIds((b) => b.final);
+
+/** Всё вместе — для галереи силуэтов и бестиария, не для игровой логики. */
+export const ALL_BOSS_ORDER = [...BOSS_ORDER, ...FINAL_ORDER];
+
+/** Финал своего пути: 'force' | 'bonds' | 'secret'. */
+export const finalBossForPath = (path) =>
+  FINAL_ORDER.find((id) => BOSSES[id].path === path) ?? null;
+
 /** Босс, живущий у отдельной метки этой локации. */
 export const bossForLocation = (locationId) =>
-  BOSS_ORDER.find((id) => BOSSES[id].location === locationId) ?? null;
+  (locationId ? BOSS_ORDER.find((id) => BOSSES[id].location === locationId) : null) ?? null;
 
 /** Совместимый выбор для endless и старых bench-волн 5, 10, 15, ... */
 export const bossForWave = (wave) => {

@@ -3,11 +3,14 @@ import { sfx } from '../core/audio.js';
 import { camera } from '../core/camera.js';
 import { rnd, TAU, shuffle } from '../core/math.js';
 import { availableEnemies, getEnemy } from '../data/enemies.js';
-import { bossForWave, bossForLocation, BOSS_ORDER, BOSSES, bossSpeedReward } from '../data/bosses.js?v=818be63';
+import { bossForWave, bossForLocation, BOSS_ORDER, BOSSES, bossSpeedReward } from '../data/bosses.js?v=9c1fabf';
 import { makeEnemy, makeBoss, makePickup } from '../entities/factory.js';
 import { fireHook, counters } from './effects.js';
+import { collectBossKey, createEndingState, KEY_COUNT, noteFinalDefeated } from './endings.js';
+import { noteBossKilled } from './npcs.js';
 import { getLocation, LOCATION_ORDER } from '../data/locations.js';
 import { nearestWorldImage, torDistance } from '../world/torus.js';
+import { floatText } from '../entities/effects.js';
 
 /**
  * ГЕЙМ-ЛУП ЗАБЕГА.
@@ -92,6 +95,7 @@ const INTERMISSION = 0.8;
 export const BREATHER = 26;
 
 export function createRun() {
+  const seed = (Math.random() * 0xffffffff) >>> 0;
   return {
     wave: 0,
     totalWavesCleared: 0,
@@ -104,7 +108,7 @@ export function createRun() {
     activeBossBiomeId: null,
     waveLocationId: 'open',
     difficulty: 1,
-    seed: (Math.random() * 0xffffffff) >>> 0,   // сид расстановки локаций (world/world.js)
+    seed,                                        // сид расстановки локаций (world/world.js)
     location: null,                              // текущая локация; null форсирует первый apply (см. systems/locations.js)
     biomeId: null,
     biome: null,
@@ -112,6 +116,7 @@ export function createRun() {
     visited: null,                               // Set посещённых клеток кластеров, для карты на M
     waypoint: null,                              // метка на карте: {x,y} в мировых координатах или null
     bossesKilled: [],                            // id побеждённых боссов — чтобы не фармить одного
+    endings: createEndingState(seed),            // три пути к финалу (systems/endings.js)
     victoryOffered: false,                       // отдельный флаг: победа возможна и при 0 обычных волн
     victoryWave: null,
     bossReward: null,                            // итог награды за скорость последнего босса
@@ -536,6 +541,20 @@ function onBossKilled(game, boss) {
   run.bossesKilled ??= [];
   if (!run.bossesKilled.includes(boss.boss)) run.bossesKilled.push(boss.boss);
 
+  // ПУТЬ СИЛЫ: часть боссов забега несёт ключ. Какие именно — решает сид,
+  // но их всегда ровно десять, поэтому зачистка всех боссов даёт полный
+  // набор по построению, а не по везению (systems/endings.js).
+  if (!run.endless) {
+    const keys = collectBossKey(run, boss.boss);
+    if (keys) {
+      floatText(
+        game.fx, boss.x, boss.y - boss.r - 26,
+        `КЛЮЧ ${keys.taken}/${KEY_COUNT}`,
+        keys.taken >= KEY_COUNT ? '#ffe066' : '#d8c4ff',
+      );
+    }
+  }
+
   sfx.bigBoom();
   camera.shake(28);
 
@@ -550,12 +569,15 @@ function onBossKilled(game, boss) {
     game.entities.pickups.push(makePickup(boss.x, boss.y, 'scrap', Math.round(scrapTotal / 6) + 2));
   }
 
+  // заказ NPC на этого босса закрывается трофеем прямо здесь (systems/npcs.js)
+  noteBossKilled(game, boss.boss);
+
   emit('boss:defeated', { boss, def, reward });
 
-  // все десять пали — забег не обрывается, показывается выбор (эндгейм)
-  if (!run.endless && run.bossesKilled.length >= BOSS_ORDER.length) {
-    emit('run:allBosses', { run });
-  }
+  // Победа больше не «убил всех подряд»: она принадлежит финалу СВОЕЙ
+  // концовки. Зачистка всех обычных боссов теперь открывает путь СИЛЫ, а не
+  // заканчивает забег (systems/endings.js, Notes/PLAYTEST_NOTES_2.md §2).
+  if (!run.endless) noteFinalDefeated(game, boss.boss);
   refreshRemaining(game);
 }
 

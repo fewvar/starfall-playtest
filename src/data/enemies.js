@@ -95,6 +95,29 @@ export const ENEMIES = {
     xp: 8, score: 55, scrap: 4, cost: 4, minWave: 1, location: 'rift',
     special: 'distortion', // короткие непредсказуемые телепорты
   },
+  sprout: {
+    id: 'sprout', name: 'ОТРОСТОК', ai: 'keepDistance', color: '#68f0b0',
+    hp: 56, r: 18, speed: 84, want: 440, fire: 2.3, melee: 10, physicalResist: 0.16, technicalResist: 0.12,
+    xp: 7, score: 55, scrap: 4, cost: 4, minWave: 1, location: 'grove',
+    special: 'sprout', // стреляет наводящимися семенами, как сбитая лоза
+  },
+  caustic: {
+    id: 'caustic', name: 'РАЗЪЕДАЮЩИЙ', ai: 'chase', color: '#b8e35b',
+    hp: 62, r: 19, speed: 132, want: 0, fire: 0, melee: 18, physicalResist: 0.08, technicalResist: 0.26,
+    xp: 7, score: 55, scrap: 4, cost: 4, minWave: 1, location: 'acid',
+    special: 'caustic', // на месте гибели остаётся кислотная лужа
+  },
+  echo: {
+    id: 'echo', name: 'ЭХО', ai: 'weave', color: '#9fb0e0',
+    hp: 38, r: 15, speed: 190, want: 220, fire: 1.5, melee: 10, physicalResist: 0.06, technicalResist: 0.2,
+    xp: 6, score: 50, scrap: 3, cost: 3, minWave: 1, location: 'dissonance',
+    special: 'echo', // оставляет за собой безвредные отпечатки
+  },
+  skimmer: {
+    id: 'skimmer', name: 'ГОНЩИК', ai: 'weave', color: '#e8a0ff',
+    hp: 30, r: 12, speed: 320, want: 150, fire: 1.1, melee: 12, physicalResist: 0.04, technicalResist: 0.1,
+    xp: 6, score: 50, scrap: 3, cost: 3, minWave: 1, location: 'dust',
+  },
 };
 
 export const ENEMY_IDS = Object.keys(ENEMIES);

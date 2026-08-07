@@ -1,15 +1,15 @@
 import { TAU, clamp, rnd } from '../core/math.js';
 import { camera } from '../core/camera.js';
-import { drawStarfield } from '../world/starfield.js';
-import { CHUNK } from '../world/world.js';
+import { drawSky, drawStarfield, drawSkyBodies } from '../world/starfield.js';
+import { CHUNK, locationAt } from '../world/world.js';
 import { getWeapon } from '../data/weapons.js';
-import { BOSSES } from '../data/bosses.js?v=818be63';
-import { activeBoss } from '../entities/bosses.js?v=818be63';
+import { BOSSES } from '../data/bosses.js?v=9c1fabf';
+import { activeBoss } from '../entities/bosses.js?v=9c1fabf';
 import { getLocation, paletteFor } from '../data/locations.js';
 import { silhouetteFor, shipSilhouetteFor, TRAIL_LENGTH } from './silhouettes.js';
 import { formatNavigationDistance } from '../systems/navigation.js';
 import { hallucinatedNumber, hallucinationActive, navigationCapabilities } from '../systems/location-policy.js';
-import { drawStationArena, drawStationSignal, drawWorldStations } from './stations.js';
+import { drawStationArena, drawStationSignal, drawWorldStations, drawWorldNpcs } from './stations.js';
 import { nearestPointImage, torDelta, torDistance } from '../world/torus.js';
 
 /** Вся отрисовка мира на canvas. UI живёт в DOM и рисуется отдельно. */
@@ -41,8 +41,8 @@ export function renderScene(ctx, game, W, H) {
 
   // палитра локации: небо и звёзды, а не только цвет тумана (см. data/locations.js)
   const palette = paletteFor(game.run.location);
-  ctx.fillStyle = palette.sky;
-  ctx.fillRect(0, 0, W, H);
+  drawSky(ctx, W, H, palette);
+  drawSkyBodies(ctx, camera, W, H, game.time, palette);
   drawStarfield(ctx, camera, W, H, game.time, palette);
 
   const shake = camera.offset();
@@ -71,9 +71,12 @@ export function renderScene(ctx, game, W, H) {
   drawBiomeGlow(ctx, world);
   drawLocationDecor(ctx, world, game.time, camera, halfW, halfH);
   drawSectorGrid(ctx, W, H);
+  drawBiomeEdge(ctx, game);
   drawStationArena(ctx, game);
   drawWorldStations(ctx, game, visible);
+  drawWorldNpcs(ctx, game, visible);
   drawLocationSpecials(ctx, game, visible);
+  drawCausticPools(ctx, game);
   drawBossHazards(ctx, game);
 
   for (const a of entities.asteroids) if (visible(a, a.r)) drawAsteroid(ctx, a, game.time, game.run.location === 'dissonance');
@@ -127,7 +130,44 @@ export function renderScene(ctx, game, W, H) {
   if (navigation.waypoint) drawWaypointArrow(ctx, game, W, H);
   if (navigation.signals) drawStationSignal(ctx, game, W, H);
   drawVignette(ctx, W, H, visMul < 1 ? 'rgba(60,40,100,.5)' : 'rgba(0,0,0,.45)');
+  drawEclipse(ctx, game, W, H);
   if (hallucinationActive(game)) drawHallucinationOverlay(ctx, game, W, H);
+}
+
+/**
+ * ЗАТМЕНИЕ «Полой Луны» (Ф3). Гаснет арена, но не сама Луна: вокруг неё
+ * остаётся световое окно. Иначе темнота отбирала бы не обзор, а сам бой —
+ * игрок терял бы из виду единственный ориентир и просто ждал бы конца.
+ */
+function drawEclipse(ctx, game, W, H) {
+  const boss = activeBoss(game);
+  if (!(boss?.eclipse > 0)) return;
+  const t = boss.eclipse / (boss.eclipseMax || 1);
+  const alpha = Math.min(1, Math.min(t * 4, (1 - t) * 4 + 0.15)) * 0.93;
+  const sx = boss.x - camera.x + W / 2;
+  const sy = boss.y - camera.y + H / 2;
+  const halo = boss.r * 3.4;
+  // за последним стопом радиальная заливка продолжается его же цветом,
+  // поэтому одного fillRect хватает на весь экран
+  const shade = ctx.createRadialGradient(sx, sy, boss.r * 0.85, sx, sy, halo);
+  shade.addColorStop(0, 'rgba(2,3,8,0)');
+  shade.addColorStop(1, `rgba(2,3,8,${alpha})`);
+  ctx.save();
+  ctx.fillStyle = shade;
+  ctx.fillRect(0, 0, W, H);
+
+  // Собственные ходовые огни: арену темнота забирает, управление — нет.
+  // Без этого полторы секунды не видно даже собственный корабль, и затмение
+  // отбирает не обзор, а сам бой.
+  const px = game.player.x - camera.x + W / 2;
+  const py = game.player.y - camera.y + H / 2;
+  const lamp = ctx.createRadialGradient(px, py, 0, px, py, 150);
+  lamp.addColorStop(0, `rgba(120,150,210,${0.5 * alpha})`);
+  lamp.addColorStop(1, 'rgba(120,150,210,0)');
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = lamp;
+  ctx.fillRect(px - 150, py - 150, 300, 300);
+  ctx.restore();
 }
 
 function hallucinatedFloater(game, text) {
@@ -201,6 +241,119 @@ function drawBiomeGlow(ctx, world) {
   ctx.restore();
 }
 
+// ─────────────────────────────── шов биома
+//
+// Выход за границу отменяет бой: волна распускается, босс уходит и его
+// придётся вызывать заново (systems/waves.js: abandonBiomeBoss). До сих пор
+// эта черта была невидимой — игрок отступал от босса и терял бой, не поняв,
+// что именно он сделал не так.
+//
+// Рисуем не идеальную окружность кластера, а настоящую границу: локацию
+// определяет центр чанка (world/world.js: locationAt), поэтому честный шов
+// ступенчатый и лежит ровно по сетке секторов. Круг был бы красивее и врал
+// бы на пол-чанка — то есть на треть экрана.
+
+const EDGE_SIDES = [
+  { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
+  { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
+];
+const EDGE_FADE = 1500;         // обычный полёт: шов заметен только вблизи
+const EDGE_FADE_STAKES = 3000;  // идёт бой: шов виден заранее, ещё до отступления
+const EDGE_BAND = 260;          // ширина внутренней полосы предупреждения
+
+/**
+ * Цвета локаций тёмные — они задумывались как фон. Линия шва из такого цвета
+ * на чёрном небе не читается вовсе, поэтому её осветляем, а тёмный оригинал
+ * оставляем полосе: идентичность биома сохраняется, а черта видна.
+ */
+function lighten(hex, amount) {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = (c) => Math.round(c + (255 - c) * amount);
+  return `rgb(${mix((n >> 16) & 255)}, ${mix((n >> 8) & 255)}, ${mix(n & 255)})`;
+}
+
+/** Стороны чанка, за которыми начинается другой биом. Свойство чанка, не кадра. */
+function edgeMask(chunk, seed) {
+  if (chunk.edgeMask !== undefined) return chunk.edgeMask;
+  let mask = 0;
+  EDGE_SIDES.forEach((side, index) => {
+    const neighbour = locationAt(chunk.canonicalCx + side.dx, chunk.canonicalCy + side.dy, seed);
+    if (neighbour.biomeId !== chunk.location.biomeId) mask |= 1 << index;
+  });
+  chunk.edgeMask = mask;
+  return mask;
+}
+
+function drawBiomeEdge(ctx, game) {
+  const { run, world, player } = game;
+  if (!run.biomeId || run.realm) return;
+
+  // Ставка: за швом теряется бой, а не просто меняется фон
+  const stakes = run.activeBossBiomeId === run.biomeId
+    || (run.waveMode === 'biome' && run.phase === 'fighting' && run.activeWaveBiomeId === run.biomeId);
+  const fade = stakes ? EDGE_FADE_STAKES : EDGE_FADE;
+  const bandColor = stakes ? '#ffb347' : (getLocation(run.location).color ?? '#4aa3ff');
+  const color = stakes ? '#ffb347' : lighten(bandColor, 0.55);
+  const pulse = stakes ? 0.72 + Math.sin(game.time * 3.4) * 0.28 : 0.6;
+
+  ctx.save();
+  ctx.lineCap = 'square';
+  if (stakes) {
+    ctx.setLineDash([34, 20]);
+    ctx.lineDashOffset = -game.time * 60;
+  }
+
+  for (const chunk of world.chunks.values()) {
+    if (chunk.location.biomeId !== run.biomeId) continue;
+    const mask = edgeMask(chunk, run.seed ?? 0);
+    if (!mask) continue;
+    const x0 = chunk.cx * CHUNK;
+    const y0 = chunk.cy * CHUNK;
+
+    EDGE_SIDES.forEach((side, index) => {
+      if (!(mask & (1 << index))) return;
+      const vertical = side.dx !== 0;
+      const ax = x0 + (side.dx > 0 ? CHUNK : 0);
+      const ay = y0 + (side.dy > 0 ? CHUNK : 0);
+      const bx = vertical ? ax : ax + CHUNK;
+      const by = vertical ? ay + CHUNK : ay;
+
+      // расстояние до отрезка: он всегда по оси, поэтому хватает зажима
+      const near = vertical
+        ? Math.hypot(player.x - ax, player.y - clamp(player.y, ay, by))
+        : Math.hypot(player.x - clamp(player.x, ax, bx), player.y - ay);
+      if (near >= fade) return;
+      const alpha = (1 - near / fade) ** 1.6 * pulse;
+      if (alpha < 0.02) return;
+
+      // Полоса уходит внутрь биома: «дальше — снаружи», а не «здесь стена».
+      // Кольцо станции (render/stations.js) наоборот держит — тона не путаем.
+      const gx = ax - side.dx * EDGE_BAND;
+      const gy = ay - side.dy * EDGE_BAND;
+      const band = ctx.createLinearGradient(gx, gy, ax, ay);
+      band.addColorStop(0, 'transparent');
+      band.addColorStop(1, bandColor);
+      ctx.globalAlpha = alpha * 0.16;
+      ctx.fillStyle = band;
+      ctx.fillRect(
+        Math.min(ax, gx, bx), Math.min(ay, gy, by),
+        vertical ? EDGE_BAND : CHUNK, vertical ? CHUNK : EDGE_BAND,
+      );
+
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = stakes ? 4 : 2;
+      glow(ctx, color, stakes ? 16 : 8);
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    });
+  }
+  ctx.restore();
+}
+
 /**
  * Визуальные черты локаций — без коллизий, только чтобы пояс, туманность,
  * кладбище, ионный шторм, гнездо и разлом читались с одного взгляда, а не
@@ -216,29 +369,155 @@ function drawLocationDecor(ctx, world, time, camera, halfW, halfH) {
     if (!decor) continue;
     switch (decor.kind) {
       case 'start': drawWreckage(ctx, decor, time, onScreen, '#7a4c3d'); break;
-      case 'belt': drawBeltDust(ctx, decor, onScreen); break;
+      case 'belt': drawBeltDust(ctx, decor, time, onScreen); break;
       case 'nebula': drawNebulaClouds(ctx, decor, time, onScreen); break;
-      case 'graveyard': drawWreckage(ctx, decor, time, onScreen); break;
+      case 'graveyard':
+        drawHullRibs(ctx, decor.hulls, time, onScreen);
+        drawWreckage(ctx, decor, time, onScreen);
+        break;
       case 'grove': drawGroveVines(ctx, decor, time, onScreen); break;
       case 'acid': drawAcidClouds(ctx, decor, time, onScreen); break;
       case 'dissonance': drawDissonanceVeins(ctx, decor, time, onScreen); break;
       case 'dust': drawDustStorm(ctx, decor, time, onScreen); break;
       case 'ionstorm': drawIonNodes(ctx, decor, time, onScreen); break;
       case 'nest': drawNestPods(ctx, decor, time, onScreen); break;
+      case 'hollow_moon': drawMoonShards(ctx, decor, time, onScreen); break;
+      case 'open': drawOpenDebris(ctx, decor, time, onScreen); break;
       case 'rift': drawRiftSwirl(ctx, decor, time, onScreen); break;
     }
   }
 }
 
-function drawBeltDust(ctx, { dust }, onScreen) {
+/**
+ * ПОЯС. Три плана вместо одного роя точек: пылевые полосы задают направление,
+ * глыбы дают объём и тень, искры руды — единственное яркое пятно в биоме.
+ * Свет у всех глыб идёт с одной стороны — иначе поле распадается на мозаику.
+ */
+function drawBeltDust(ctx, { dust, rocks, bands }, time, onScreen) {
   ctx.save();
+  for (const band of bands ?? []) {
+    if (!onScreen(band.x, band.y, band.length)) continue;
+    ctx.save();
+    ctx.translate(band.x, band.y);
+    ctx.rotate(band.angle);
+    const g = ctx.createLinearGradient(0, -band.width, 0, band.width);
+    g.addColorStop(0, 'transparent');
+    g.addColorStop(0.5, '#6b5334');
+    g.addColorStop(1, 'transparent');
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = g;
+    ctx.fillRect(-band.length / 2, -band.width, band.length, band.width * 2);
+    ctx.restore();
+  }
+
+  for (const rock of rocks ?? []) {
+    if (!onScreen(rock.x, rock.y, rock.r)) continue;
+    ctx.save();
+    ctx.translate(rock.x, rock.y);
+    ctx.rotate(rock.angle + time * rock.spin);
+    // Полупрозрачно и без резкого контура: декоративная глыба не должна
+    // читаться как настоящий астероид, по которому можно стрелять.
+    ctx.globalAlpha = 0.42;
+    ctx.fillStyle = '#1c1610';
+    ctx.beginPath();
+    const n = rock.verts.length;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU;
+      const rr = rock.r * rock.verts[i];
+      i === 0 ? ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr)
+        : ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = '#a8834e';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(0, 0, rock.r * 0.86, rock.lit - 1.1, rock.lit + 1.1);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   for (const d of dust) {
     if (!onScreen(d.x, d.y, d.r)) continue;
-    ctx.fillStyle = d.ore ? '#e0b566' : '#8a7a68';
-    ctx.globalAlpha = d.ore ? 0.8 : 0.45;
+    ctx.fillStyle = d.ore ? '#ffcf7a' : '#8a7a68';
+    ctx.globalAlpha = d.ore ? 0.95 : 0.4;
     ctx.beginPath();
     ctx.arc(d.x, d.y, d.r, 0, TAU);
     ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** Открытый космос: редкий мусор и одинокая комета. Пусто, но не мертво. */
+function drawOpenDebris(ctx, { debris, comet }, time, onScreen) {
+  ctx.save();
+  for (const d of debris ?? []) {
+    if (!onScreen(d.x, d.y, d.r)) continue;
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    ctx.rotate(d.angle + time * d.spin);
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = '#5a6a8a';
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(-d.r, -d.r * 0.42, d.r * 2, d.r * 0.84);
+    ctx.restore();
+  }
+  if (comet && onScreen(comet.x, comet.y, comet.length)) {
+    ctx.save();
+    ctx.translate(comet.x, comet.y);
+    ctx.rotate(comet.angle);
+    const g = ctx.createLinearGradient(0, 0, -comet.length, 0);
+    g.addColorStop(0, '#cfe4ff');
+    g.addColorStop(1, 'transparent');
+    ctx.globalAlpha = 0.4 + 0.15 * Math.sin(time * 0.6);
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-comet.length, 0);
+    ctx.stroke();
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = '#eaf4ff';
+    ctx.beginPath();
+    ctx.arc(0, 0, 2.4, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/**
+ * КЛАДБИЩЕ. Рёбра корпусов: длинные хребты с поперечинами. Без них биом
+ * читался как поле камней, а не как то, что когда-то было флотом.
+ */
+function drawHullRibs(ctx, hulls, time, onScreen) {
+  ctx.save();
+  for (const hull of hulls ?? []) {
+    if (!onScreen(hull.x, hull.y, hull.length)) continue;
+    ctx.save();
+    ctx.translate(hull.x, hull.y);
+    ctx.rotate(hull.angle + time * hull.drift);
+    ctx.globalAlpha = 0.55;
+    ctx.strokeStyle = '#3f6a63';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(-hull.length / 2, 0);
+    ctx.lineTo(hull.length / 2, 0);
+    ctx.stroke();
+    ctx.lineWidth = 1.4;
+    ctx.globalAlpha = 0.4;
+    for (let i = 0; i <= hull.ribs; i++) {
+      const t = i / hull.ribs;
+      const x = -hull.length / 2 + hull.length * t;
+      // рёбра к носу и корме короче: получается силуэт корпуса, а не лестница
+      const h = hull.width * Math.sin(t * Math.PI);
+      ctx.beginPath();
+      ctx.moveTo(x, -h);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
   ctx.restore();
 }
@@ -318,9 +597,24 @@ function drawGroveVines(ctx, { vines }, time, onScreen) {
   ctx.restore();
 }
 
-function drawAcidClouds(ctx, { clouds }, time, onScreen) {
+function drawAcidClouds(ctx, { clouds, bubbles }, time, onScreen) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
+  // Пузыри всплывают и лопаются: единственное, что движется в кислоте вне
+  // боя. Без них облако выглядело нарисованным один раз и застывшим.
+  for (const bubble of bubbles ?? []) {
+    if (!onScreen(bubble.x, bubble.y, bubble.rise + bubble.r)) continue;
+    const t = (time * bubble.speed + bubble.phase) % TAU / TAU;
+    const y = bubble.y - t * bubble.rise;
+    const fade = Math.sin(t * Math.PI);
+    ctx.globalAlpha = 0.42 * fade;
+    ctx.strokeStyle = '#c8ef7a';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.arc(bubble.x, y, bubble.r * (0.5 + t * 0.7), 0, TAU);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
   for (const cloud of clouds) {
     if (!onScreen(cloud.x, cloud.y, cloud.r)) continue;
     const pulse = 0.92 + Math.sin(time * 0.45 + cloud.phase) * 0.08;
@@ -421,8 +715,24 @@ function drawIonNodes(ctx, { nodes }, time, onScreen) {
   ctx.restore();
 }
 
-function drawNestPods(ctx, { pods }, time, onScreen) {
+function drawNestPods(ctx, { pods, strands }, time, onScreen) {
   ctx.save();
+  // Перепонки между коконами рисуются под ними: гнездо должно выглядеть
+  // выращенным целиком, а не набором отдельных пятен.
+  for (const strand of strands ?? []) {
+    const a = pods[strand.a];
+    const b = pods[strand.b];
+    if (!a || !b || !onScreen((a.x + b.x) / 2, (a.y + b.y) / 2, 700)) continue;
+    const sag = strand.sag * (0.85 + 0.15 * Math.sin(time * 0.5 + strand.phase));
+    ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = '#ff7a5a';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.quadraticCurveTo((a.x + b.x) / 2, (a.y + b.y) / 2 + sag, b.x, b.y);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'lighter';
   for (const pod of pods) {
     if (!onScreen(pod.x, pod.y, pod.r)) continue;
@@ -436,6 +746,38 @@ function drawNestPods(ctx, { pods }, time, onScreen) {
     ctx.beginPath();
     ctx.arc(pod.x, pod.y, r, 0, TAU);
     ctx.fill();
+  }
+  ctx.restore();
+}
+
+/**
+ * ПОЛАЯ ЛУНА: обломки коры. Тело обломка почти чёрное, свет ложится только
+ * на кромку — получается тот самый серп. Он один и делает локацию узнаваемой,
+ * поэтому рисуется поверх тела, а не смешивается с ним.
+ */
+function drawMoonShards(ctx, { shards }, time, onScreen) {
+  ctx.save();
+  for (const shard of shards) {
+    if (!onScreen(shard.x, shard.y, shard.r)) continue;
+    const drift = shard.lit + time * shard.spin;
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = '#0b0e18';
+    ctx.beginPath();
+    ctx.arc(shard.x, shard.y, shard.r, 0, TAU);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.5 + 0.12 * Math.sin(time * 0.4 + shard.phase);
+    ctx.strokeStyle = '#c9d6ea';
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.arc(shard.x, shard.y, shard.r, drift - 1.05, drift + 1.05);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.18;
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.arc(shard.x, shard.y, shard.r * 0.97, drift - 0.8, drift + 0.8);
+    ctx.stroke();
   }
   ctx.restore();
 }
@@ -603,7 +945,48 @@ function drawHullSeed(ctx, game) {
   ctx.restore();
 }
 
+/**
+ * ЛОЗА ЗАРОСЛЕЙ. Намеренно не похожа на камень: свитая спираль с пульсирующим
+ * стручком в центре. Игрок должен видеть, что это другое — по камню стрелять
+ * безопасно, а сбитая лоза выстрелит семенами в ответ.
+ */
+function drawVine(ctx, a, time) {
+  const pulse = 0.7 + 0.3 * Math.sin(time * 1.8 + a.x * 0.01);
+  const hurt = a.hp / a.maxHp;
+  ctx.save();
+  ctx.translate(a.x, a.y);
+  ctx.rotate(a.angle * 0.4);
+  glow(ctx, '#68f0b0', 12);
+  ctx.strokeStyle = a.flash > 0 ? '#ffffff' : '#4fd89a';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  for (let i = 0; i <= 46; i++) {
+    const t = i / 46;
+    const ang = t * TAU * 1.9;
+    const rr = a.r * (0.24 + t * 0.86);
+    const x = Math.cos(ang) * rr;
+    const y = Math.sin(ang) * rr;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.stroke();
+
+  // три стручка на витке: это они и разлетятся семенами
+  ctx.fillStyle = a.flash > 0 ? '#ffffff' : '#a8ffd8';
+  for (let i = 0; i < 3; i++) {
+    const ang = time * 0.5 + i * 2.094;
+    const rr = a.r * 0.62;
+    ctx.globalAlpha = 0.5 + 0.5 * pulse * hurt;
+    ctx.beginPath();
+    ctx.arc(Math.cos(ang) * rr, Math.sin(ang) * rr, 3.4 + pulse * 1.6, 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
 function drawAsteroid(ctx, a, time = 0, dissonant = false) {
+  if (a.vine) return drawVine(ctx, a, time);
   ctx.save();
   ctx.translate(a.x, a.y);
   ctx.rotate(a.angle);
@@ -948,20 +1331,47 @@ function drawTelegraphs(ctx, game) {
       ctx.lineTo(t.x2, t.y2);
       ctx.stroke();
     } else if (t.kind === 'ring') {
-      // кольцо на глазах сжимается от r к r2 — видно и куда бежать, и когда
+      // кольцо на глазах сжимается от r к r2 — видно и куда бежать, и когда.
+      // gapArc — честная брешь: снарядов там не будет, и это видно заранее
       const r = t.r + (t.r2 - t.r) * k;
+      const gap = t.gapArc ?? 0;
+      const from = (t.gapAngle ?? 0) + gap / 2;
+      const to = from + TAU - gap;
       ctx.globalAlpha = 0.4 + k * 0.4;
       ctx.setLineDash([18, 12]);
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(t.x, t.y, r, 0, TAU);
+      ctx.arc(t.x, t.y, r, from, to);
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.globalAlpha = 0.25;
       ctx.beginPath();
-      ctx.arc(t.x, t.y, t.r2, 0, TAU);
+      ctx.arc(t.x, t.y, t.r2, from, to);
       ctx.stroke();
     }
+  }
+  ctx.restore();
+}
+
+/** Лужи «Разъедающих»: угроза видна ровно столько, сколько живёт. */
+function drawCausticPools(ctx, game) {
+  const pools = game.run.causticPools;
+  if (!pools?.length) return;
+  ctx.save();
+  for (const pool of pools) {
+    const t = pool.life / pool.max;
+    const g = ctx.createRadialGradient(pool.x, pool.y, 0, pool.x, pool.y, pool.r);
+    g.addColorStop(0, `rgba(184,227,91,${0.26 * t})`);
+    g.addColorStop(1, 'transparent');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(pool.x, pool.y, pool.r, 0, TAU);
+    ctx.fill();
+    ctx.globalAlpha = 0.5 * t;
+    ctx.strokeStyle = '#b8e35b';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
   }
   ctx.restore();
 }
@@ -1127,7 +1537,7 @@ const CORE_TINT = {
   '#e879f9': '#f8d4ff', '#4ad9ff': '#cdf3ff', '#ff4a4a': '#ffc4c4',
   '#c9955a': '#f0d8bc', '#8a7ad0': '#ddd6f5', '#d4c05a': '#f2ead0',
   '#7ee8ff': '#dffaff', '#ff6ba0': '#ffd2e2', '#64f0af': '#d8ffeb',
-  '#b8e35b': '#efffb8', '#ff79c6': '#ffd6ef',
+  '#b8e35b': '#efffb8', '#ff79c6': '#ffd6ef', '#ff7043': '#ffd2bc',
 };
 
 function drawBoss(ctx, b) {
@@ -1145,9 +1555,11 @@ function drawBoss(ctx, b) {
   ctx.save();
   ctx.translate(b.x, b.y);
 
-  // Ф3 «Ока»: между атаками пропадает — от него остаётся только контур-намёк
+  // Ф3 «Ока»: между атаками пропадает — от него остаётся только контур-намёк.
+  // Перед возвращением контур разгорается (b.reveal), поэтому появление
+  // читается заранее, а не выпрыгивает.
   if (b.hidden) {
-    ctx.globalAlpha = 0.16;
+    ctx.globalAlpha = 0.16 + 0.5 * (b.reveal ?? 0);
     ctx.strokeStyle = def.color;
     ctx.lineWidth = 2;
     ctx.setLineDash([8, 10]);
@@ -1162,7 +1574,7 @@ function drawBoss(ctx, b) {
   ctx.shadowColor = def.color;
   ctx.shadowBlur = 34;
 
-  if (b.boss === 'eye') {
+  if (b.boss === 'eye' && b.beamHot > 0) {
     // на второй фазе луч раздваивается — рисуем оба
     for (const off of b.phase >= 2 ? [0, Math.PI] : [0]) {
       ctx.save();
@@ -1348,6 +1760,117 @@ function drawBoss(ctx, b) {
     ctx.beginPath();
     ctx.arc(0, 0, r * 0.18, 0, TAU);
     ctx.fill();
+  } else if (b.boss === 'legion') {
+    // Собран из чужих корпусов: сегменты в цветах тех, кого игрок уже прошёл.
+    const parts = ['#ff6b8a', '#ffb14a', '#7ee8ff', '#64f0af', '#5ef0d0', '#b8e35b', '#ff7043'];
+    ctx.rotate(b.spin * 0.3);
+    for (let i = 0; i < parts.length; i++) {
+      ctx.save();
+      ctx.rotate(i * TAU / parts.length);
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = parts[i];
+      ctx.beginPath();
+      ctx.moveTo(r * 0.28, 0);
+      ctx.lineTo(r * 1.02, -r * 0.3);
+      ctx.lineTo(r * 1.02, r * 0.3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#12060c';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.42, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = coreTint(def.color);
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.2, 0, TAU);
+    ctx.fill();
+  } else if (b.boss === 'judgment') {
+    if (b.disguised) {
+      // Единственный управляемый твист в игре: до раскрытия это силуэт
+      // союзника в палитре NPC — тот же кораблик, что стоит на карте.
+      ctx.shadowColor = '#5ef0d0';
+      ctx.fillStyle = '#1a2432';
+      ctx.strokeStyle = '#5ef0d0';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(r * 0.9, 0); ctx.lineTo(-r * 0.45, -r * 0.64); ctx.lineTo(-r * 0.15, 0); ctx.lineTo(-r * 0.45, r * 0.64);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      // после раскрытия — угловатая рама трибунала вокруг тёмного ядра
+      ctx.rotate(-b.spin * 0.35);
+      ctx.strokeStyle = body;
+      ctx.lineWidth = 3;
+      poly(ctx, 0, 0, r * 1.15, 3, 0, null, body);
+      poly(ctx, 0, 0, r * 1.15, 3, Math.PI, null, body);
+      ctx.fillStyle = '#08120f';
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.5, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = coreTint(def.color);
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.16, 0, TAU);
+      ctx.fill();
+    }
+  } else if (b.boss === 'voice') {
+    // Наследует тишину Сингулярности: почти нет тела, только контур и
+    // редкие точки. Читается по тому, чего вокруг него НЕТ.
+    ctx.shadowBlur = 10;
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = body;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, TAU);
+    ctx.stroke();
+    ctx.globalAlpha = 0.9;
+    for (let i = 0; i < 3; i++) {
+      const a = b.spin * (0.4 + i * 0.25) + i * 2.1;
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62, 3.4, 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#03040a';
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.34, 0, TAU);
+    ctx.fill();
+  } else if (b.boss === 'hollow_moon') {
+    // Фаза Луны — это и есть индикатор фазы боя: узкий растущий серп,
+    // полный диск, узкий убывающий. Смотреть в полоску HP не нужно.
+    const terminator = b.spin * 0.25;
+    const offset = b.phase === 2 ? 0 : 0.78;
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, TAU);
+    ctx.fill();
+    if (offset > 0) {
+      // тень режется по корпусу и не должна светиться сама: общий glow
+      // корпуса залил бы серп обратно в полный диск
+      const side = b.phase >= 3 ? -1 : 1;   // растущая и убывающая — разные стороны
+      ctx.save();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = b.phase >= 3 ? '#04050a' : '#0d1120';
+      ctx.beginPath();
+      ctx.arc(Math.cos(terminator) * r * offset * side, Math.sin(terminator) * r * offset * side, r * 1.02, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = '#5c667e';
+    for (let i = 0; i < 5; i++) {
+      const a = b.spin * 0.25 + i * 1.257;
+      const cr = r * (0.1 + (i % 3) * 0.05);
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * r * 0.45, Math.sin(a) * r * 0.45, cr, 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = 2;
+    poly(ctx, 0, 0, r * 1.5, 3, -b.spin * 0.4, null, body);
   } else if (b.boss === 'distortion') {
     // силуэт корабля игрока, вывернутый наизнанку: два встречных клина
     ctx.fillStyle = body;
@@ -1618,10 +2141,12 @@ function drawVignette(ctx, W, H, color = 'rgba(0,0,0,.45)') {
   ctx.fillRect(0, 0, W, H);
 }
 
-/** Живой фон для меню: те же звёзды, медленно плывущие. */
+/** Живой фон для меню: то же небо открытого космоса, медленно плывущее. */
 export function renderMenuBackdrop(ctx, W, H, time) {
-  ctx.fillStyle = '#05060d';
-  ctx.fillRect(0, 0, W, H);
-  drawStarfield(ctx, { x: time * 22, y: Math.sin(time * 0.15) * 120 }, W, H, time);
+  const palette = paletteFor('open');
+  const drift = { x: time * 22, y: Math.sin(time * 0.15) * 120 };
+  drawSky(ctx, W, H, palette);
+  drawSkyBodies(ctx, drift, W, H, time, palette);
+  drawStarfield(ctx, drift, W, H, time, palette);
   drawVignette(ctx, W, H);
 }

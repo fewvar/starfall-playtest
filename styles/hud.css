@@ -247,6 +247,13 @@
   border-style: dashed;
   color: #cfe3ff;
 }
+/* Свёрнутый хвост списка: не элемент билда, а указатель на экран Tab */
+.chip.more {
+  --chip-color: var(--ink-faint);
+  background: rgba(12, 22, 44, 0.4);
+  color: var(--ink-faint);
+}
+.chip.more i { font-style: normal; opacity: 0.55; margin-left: calc(4px * var(--ui)); }
 
 /* ── активные способности ───────────────────── */
 #ability-bar { display: flex; flex-wrap: wrap; gap: calc(6px * var(--ui)); }

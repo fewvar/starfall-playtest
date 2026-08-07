@@ -1,7 +1,7 @@
 import { emit, on } from '../core/events.js';
 import { sfx } from '../core/audio.js';
 import { camera } from '../core/camera.js';
-import { PERKS, WAVE_ONLY, RARITY, cardById } from '../data/perks.js';
+import { PERKS, WAVE_ONLY, RARITY, cardById, SINGULARITY_PERK } from '../data/perks.js';
 import { ABILITIES } from '../data/abilities.js';
 import { getShip } from '../data/ships.js';
 import { getWeapon } from '../data/weapons.js';
@@ -132,8 +132,10 @@ export function playerFeatures(player) {
 export function isAvailable(game, card, { rewardContext }) {
   const p = game.player;
   // Эксклюзивные находки выдаются своим локационным encounter напрямую и
-  // никогда не просачиваются в обычные level-up/wave reward пулы.
-  if (card.exclusiveSource) return false;
+  // никогда не просачиваются в обычные level-up/wave reward пулы. Исключение
+  // одно: карточка, которую игрок уже находил, — она остаётся разблокированной
+  // навсегда и с тех пор ходит в общем пуле (путь ТАЙНЫ, systems/endings.js).
+  if (card.exclusiveSource && !(card.unlockedBy && meta.achievementUnlocked(card.unlockedBy))) return false;
   // Пассивка/активка исчерпывается по max навсегда, а оружейная карточка
   // снова доступна после того, как соответствующий ствол был выброшен.
   if (!card.weapon && levelOf(p, card.id) >= card.max) return false;
@@ -189,7 +191,12 @@ export const returnedWeaponCards = (player) => Object.entries(player.weaponOffer
 
 function poolFor(game, rewardContext) {
   const returns = rewardContext ? returnedWeaponCards(game.player) : [];
-  const source = rewardContext ? [...PERKS, ...WAVE_ONLY, ...returns] : PERKS;
+  // Разблокированный навсегда секрет Сингулярности — единственная карточка,
+  // которую в пул добавляет прошлый забег, а не текущий (см. isAvailable).
+  const unlocked = [SINGULARITY_PERK];
+  const source = rewardContext
+    ? [...PERKS, ...WAVE_ONLY, ...returns, ...unlocked]
+    : [...PERKS, ...unlocked];
   return source.filter((card) => isAvailable(game, card, { rewardContext }));
 }
 

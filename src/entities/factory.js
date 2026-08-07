@@ -79,6 +79,9 @@ export function makeBoss(typeId, x, y, scale = 1) {
     cd2: 4,
     cd3: 3,
     cd4: 6,
+    string: null,          // активная связка атак (entities/bosses.js)
+    recoveryUntil: 0,      // punish-окно: до этого b.age новых атак нет
+    lastString: null,      // след последней связки — для автотестов
     spin: 0,
     charge: 0,
     ramDash: 0,
@@ -86,6 +89,8 @@ export function makeBoss(typeId, x, y, scale = 1) {
     ramNx: 0,
     ramNy: 0,
     beamAngle: 0,
+    beamHot: 0,            // сколько секунд ещё горит луч «Ока»
+    reveal: 1,             // насколько проявлен корпус (Ф3 «Ока»)
     flash: 0,
     wobble: 0,
     freezeUntil: 0,

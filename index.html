@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%2305060d'/><path d='M6 16 L26 8 L20 16 L26 24 Z' fill='%234aa3ff'/></svg>">
 <link rel="stylesheet" href="styles/base.css">
 <link rel="stylesheet" href="styles/hud.css">
-<link rel="stylesheet" href="styles/screens.css?v=818be63">
+<link rel="stylesheet" href="styles/screens.css?v=9c1fabf">
 <link rel="stylesheet" href="styles/devpanel.css">
 </head>
 <body>
@@ -221,6 +221,47 @@
   </div>
 </section>
 
+<!-- Разговор с NPC: тот же спокойный паттерн, что у станции, но без тревоги -->
+<section id="screen-npc-confirm" class="screen station-confirm" hidden>
+  <div class="station-confirm-panel npc-panel">
+    <p id="npc-confirm-kind" class="station-kicker"></p>
+    <h2>ПОГОВОРИТЬ?</h2>
+    <p id="npc-confirm-location" class="station-location"></p>
+    <p id="npc-confirm-line" class="npc-line"></p>
+    <div class="menu-buttons">
+      <button id="btn-npc-talk" class="btn">ПОГОВОРИТЬ <kbd>Enter</kbd></button>
+      <button id="btn-npc-leave" class="btn btn-ghost">ПРОЛЕТЕТЬ МИМО <kbd>Esc</kbd></button>
+    </div>
+  </div>
+</section>
+
+<!-- Тихий вызов босса: тот же каркас, но без тревоги станции (5.4) -->
+<section id="screen-boss-call" class="screen station-confirm" hidden>
+  <div class="station-confirm-panel npc-panel">
+    <p id="boss-call-kicker" class="station-kicker"></p>
+    <h2 id="boss-call-title">ВЫЗВАТЬ?</h2>
+    <p id="boss-call-name" class="station-location"></p>
+    <p id="boss-call-line" class="npc-line"></p>
+    <div class="menu-buttons">
+      <button id="btn-boss-call" class="btn">ВЫЗВАТЬ <kbd>Enter</kbd></button>
+      <button id="btn-boss-wait" class="btn btn-ghost">ПОКА НЕТ <kbd>Esc</kbd></button>
+    </div>
+  </div>
+</section>
+
+<section id="screen-npc" class="screen station-confirm" hidden>
+  <div class="station-confirm-panel npc-panel npc-panel-wide">
+    <p id="npc-title" class="station-kicker"></p>
+    <h2 id="npc-heading">РАЗГОВОР</h2>
+    <p id="npc-reputation" class="station-location"></p>
+    <div id="npc-service" class="npc-service"></div>
+    <div id="npc-shop" class="npc-shop"></div>
+    <div class="menu-buttons">
+      <button id="btn-npc-close" class="btn btn-ghost">ЗАКОНЧИТЬ <kbd>Esc</kbd></button>
+    </div>
+  </div>
+</section>
+
 <!-- ─────────────── Выбор карточки ─────────────── -->
 <section id="screen-cards" class="screen screen-cards" hidden>
   <div class="screen-inner">
@@ -312,6 +353,6 @@
   </div>
 </div>
 
-<script type="module" src="src/main.js?v=818be63"></script>
+<script type="module" src="src/main.js?v=9c1fabf"></script>
 </body>
 </html>

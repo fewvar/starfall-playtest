@@ -9,6 +9,7 @@ import {
   torDistance,
 } from './torus.js';
 import { locationsForSeed as layoutForSeed } from './placement.js';
+import { createGrid, rebuildGrid, queryGrid } from '../core/grid.js';
 
 /**
  * Мир нарезан на чанки. Содержимое чанка выводится из хеша его координат,
@@ -182,6 +183,20 @@ function spawnChunk(game, cx, cy) {
     entities.asteroids.push(a);
   }
 
+  // ЛОЗЫ ЗАРОСЛЕЙ. Разрушаемый объект, а не декор: живут в том же списке, что
+  // астероиды, потому что им нужно ровно то же — HP, попадания снарядов,
+  // владение чанком и выгрузка вместе с ним. Отличает их флаг vine.
+  for (let i = 0; i < (location.vines ?? 0); i++) {
+    const vine = makeAsteroid(ox + random() * CHUNK, oy + random() * CHUNK, 30 + random() * 22, random);
+    vine.vine = true;
+    vine.hp = vine.maxHp = vine.r * 2.4;
+    vine.vx *= 0.25;
+    vine.vy *= 0.25;
+    vine.spin *= 0.4;
+    vine.chunk = key;
+    entities.asteroids.push(vine);
+  }
+
   for (let i = 0; i < location.drops; i++) {
     entities.pickups.push({
       x: ox + random() * CHUNK,
@@ -198,7 +213,63 @@ function spawnChunk(game, cx, cy) {
   world.chunks.set(key, { cx, cy, canonicalCx, canonicalCy, location, decor });
 }
 
-/** Обновление дрейфа астероидов (столкновения обрабатывает systems/combat). */
+/**
+ * Столкновения астероидов друг с другом (упругие, с учётом массы).
+ *
+ * Раньше камни свободно проходили насквозь: поле выглядело не полем, а
+ * набором независимых спрайтов на одном слое. Масса берётся от площади —
+ * мелкий обломок отлетает от глыбы, а не двигает её.
+ *
+ * Перебор идёт по сетке, а не парами: на поздних волнах в поясе бывает под
+ * сотню камней, и N² здесь стоил бы дороже всей остальной физики.
+ */
+const asteroidGrid = createGrid(220);
+const REST = 0.86;   // потеря энергии на удар: камни не пружинят вечно
+
+function resolveAsteroidPairs(game) {
+  const list = game.entities.asteroids;
+  if (list.length < 2) return;
+  rebuildGrid(asteroidGrid, list);
+
+  for (const a of list) {
+    queryGrid(asteroidGrid, a.x, a.y, a.r + 90, (b) => {
+      // каждую пару обрабатываем один раз: сравнение по ссылке через индекс
+      // не подходит, сетка их не упорядочивает — берём стабильный признак
+      if (b === a || b.r > a.r || (b.r === a.r && b.x <= a.x)) return false;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const min = a.r + b.r;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= min * min || d2 === 0) return false;
+
+      const d = Math.sqrt(d2);
+      const nx = dx / d;
+      const ny = dy / d;
+      const ma = a.r * a.r;
+      const mb = b.r * b.r;
+      const total = ma + mb;
+
+      // расталкивание: без него камни залипают друг в друге и дрожат
+      const overlap = min - d;
+      a.x -= nx * overlap * (mb / total);
+      a.y -= ny * overlap * (mb / total);
+      b.x += nx * overlap * (ma / total);
+      b.y += ny * overlap * (ma / total);
+
+      const rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+      if (rel > 0) return false;          // уже расходятся
+      const impulse = (-(1 + REST) * rel) / total;
+      a.vx -= impulse * mb * nx;
+      a.vy -= impulse * mb * ny;
+      b.vx += impulse * ma * nx;
+      b.vy += impulse * ma * ny;
+      a.spin += rel * 0.0006 * (mb / total);
+      b.spin -= rel * 0.0006 * (ma / total);
+      return false;
+    });
+  }
+}
+
 export function updateAsteroids(game, dt) {
   for (const a of game.entities.asteroids) {
     a.x += a.vx * dt;
@@ -206,4 +277,5 @@ export function updateAsteroids(game, dt) {
     a.angle += a.spin * dt;
     a.flash -= dt;
   }
+  resolveAsteroidPairs(game);
 }

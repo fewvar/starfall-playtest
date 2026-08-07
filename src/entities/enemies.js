@@ -1,8 +1,9 @@
 import { angLerp, lerp, rnd, TAU } from '../core/math.js';
 import { DAMAGE_TYPE } from '../core/damage.js';
+import { sfx } from '../core/audio.js';
 import { damageEnemy, hurtPlayer, killEnemy, splitAsteroid } from '../systems/combat.js';
 import { shootAtPlayer, spawnFoeBullet } from './projectiles.js';
-import { updateBoss } from './bosses.js?v=818be63';
+import { updateBoss } from './bosses.js?v=9c1fabf';
 import { getWeapon } from '../data/weapons.js';
 
 const PHYSICAL_DAMAGE = { type: DAMAGE_TYPE.PHYSICAL, penetration: 0, fromEffect: false };
@@ -85,6 +86,19 @@ export function updateEnemies(game, baseDt) {
       }
     }
 
+    // «Эхо»: за ним тянутся отпечатки — они безвредны и гаснут. Диссонанс
+    // врёт картинкой, но не хитбоксом: попасть можно только по самому врагу.
+    if (e.special === 'echo') {
+      e.echoCd = (e.echoCd ?? 0) - dt;
+      if (e.echoCd <= 0) {
+        e.echoCd = 0.22;
+        game.fx.particles.push({
+          x: e.x, y: e.y, vx: e.vx * 0.1, vy: e.vy * 0.1,
+          life: 0.55, max: 0.55, color: e.color, size: e.r * 0.8,
+        });
+      }
+    }
+
     // «Фантом»/«Искажение»: короткие непредсказуемые телепорты рядом с игроком
     if (e.special === 'phantom' || e.special === 'distortion') {
       e.teleportCd -= dt;
@@ -157,6 +171,27 @@ export function updateEnemies(game, baseDt) {
       e.vy = lerp(e.vy, (ny * push + nx * strafe) * e.speed, dt * agility);
       e.angle = angLerp(e.angle, Math.atan2(dy, dx), dt * (e.frontShield ? 2.2 : 5));
 
+      // «Твоя копия»: не просто враг с твоим стволом — она и ДВИГАЕТСЯ как ты,
+      // теми же рывками с тем же откатом (entities/player.js:tryDash). Без
+      // этого дуэль с собой чувствуется дуэлью только по картинке.
+      if (e.clone) {
+        e.dashCooldown = (e.dashCooldown ?? 0) - dt;
+        if (e.dashCooldown <= 0 && d < 620) {
+          e.dashCooldown = rnd(2.6, 1.4);
+          const a = Math.hypot(e.vx, e.vy) > 40 ? Math.atan2(e.vy, e.vx) : e.angle;
+          e.vx += Math.cos(a) * 620;
+          e.vy += Math.sin(a) * 620;
+          for (let k = 0; k < 8; k++) {
+            const ang = rnd(TAU);
+            game.fx.particles.push({
+              x: e.x, y: e.y,
+              vx: Math.cos(ang) * 160, vy: Math.sin(ang) * 160,
+              life: 0.35, max: 0.35, color: '#dff0ff', size: 2.2,
+            });
+          }
+        }
+      }
+
       if (e.fire > 0) {
         e.cd -= dt;
         if (e.cd <= 0 && d < aggro * 0.85) fireEnemyWeapon(game, e, dx, dy);
@@ -202,6 +237,32 @@ function fireEnemyWeapon(game, e, dx, dy) {
       const off = count === 1 ? 0 : (i - (count - 1) / 2) * (w.spread || 0.12) * 2;
       spawnFoeBullet(game, e, base + off, 460, e.damage * 0.5, w.color, 4, PHYSICAL_DAMAGE);
     }
+    return;
+  }
+
+  // Близнецы МАТКИ РОЯ (Ф3) дерутся не как мать. У неё вращающаяся спираль,
+  // от которой уходят вбок; у них — редкое кольцо в упор, от которого надо
+  // разрывать дистанцию. Иначе деление меняет только количество полосок HP.
+  if (e.hiveTwin) {
+    e.cd = 2.4;
+    const base = Math.atan2(dy, dx);
+    for (let i = 0; i < 6; i++) {
+      spawnFoeBullet(game, e, base + i * TAU / 6, 210, e.damage * 0.5, e.color, 5, PHYSICAL_DAMAGE);
+    }
+    return;
+  }
+
+  // «Отросток»: те же наводящиеся семена, что у сбитой лозы Зарослей —
+  // биом учит одному приёму двумя способами, а не двум разным.
+  if (e.special === 'sprout') {
+    e.cd = e.fire;
+    const base = Math.atan2(dy, dx);
+    for (let k = -1; k <= 1; k++) {
+      const seed = spawnFoeBullet(game, e, base + k * 0.3, 190, e.damage * 0.8, '#68f0b0', 5, PHYSICAL_DAMAGE);
+      seed.homing = 0.45;
+      seed.life = 4.5;
+    }
+    sfx.enemyShot();
     return;
   }
 

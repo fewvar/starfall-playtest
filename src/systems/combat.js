@@ -87,6 +87,21 @@ export function killEnemy(game, enemy) {
   stats.killStreak++;
   stats.bestStreak = Math.max(stats.bestStreak, stats.killStreak);
 
+  /*
+   * «РАЗЪЕДАЮЩИЙ» оставляет лужу там, где погиб. Лужа принадлежит забегу, а
+   * не боссу: у неё короткая жизнь и она исчезает сама — иначе кислотное
+   * облако через десять волн превратилось бы в сплошной непроходимый пол.
+   */
+  if (enemy.special === 'caustic') {
+    game.run.causticPools ??= [];
+    game.run.causticPools.push({
+      x: enemy.x, y: enemy.y, r: 96, life: 6, max: 6,
+      damage: (enemy.damage ?? 12) * 0.5,
+    });
+    if (game.run.causticPools.length > 12) game.run.causticPools.shift();
+    blastRing(game.fx, enemy.x, enemy.y, 96, '#b8e35b');
+  }
+
   if (enemy.boss) {
     stats.bossKills++;
     fireHook(game, 'onBossKill', { enemy });
@@ -206,6 +221,34 @@ export function splitAsteroid(game, asteroid) {
   const i = list.indexOf(asteroid);
   if (i < 0) return;
   list.splice(i, 1);
+
+  /*
+   * ЛОЗА ЗАРОСЛЕЙ вместо осколков выбрасывает наводящиеся семена. Стрелять
+   * по лозе — осознанный размен: она мешает лететь, но сбитая огрызается,
+   * и уйти от семян можно только манёвром (доворот у них ограничен).
+   */
+  if (asteroid.vine) {
+    spark(game.fx, asteroid.x, asteroid.y, 18, '#68f0b0', 220, 0.6, 2.4);
+    sfx.boom();
+    camera.shake(3);
+    game.run.score += 8;
+    fireHook(game, 'onAsteroidBreak', { asteroid });
+    // Кладём снаряды напрямую, а не через spawnFoeBullet: entities/projectiles
+    // уже импортирует combat, и обратный импорт замкнул бы цикл, которого в
+    // проекте нет нигде (см. CONTEXT.md о направлении зависимостей).
+    const seeds = 5;
+    for (let i = 0; i < seeds; i++) {
+      const angle = (i / seeds) * Math.PI * 2 + rnd(0.4);
+      game.projectiles.foeBullets.push({
+        x: asteroid.x, y: asteroid.y,
+        vx: Math.cos(angle) * 170, vy: Math.sin(angle) * 170,
+        damage: 14 + (game.run.difficulty ?? 1) * 2,
+        color: '#68f0b0', r: 5, life: 5, homing: 0.5,
+        damageSpec: { type: DAMAGE_TYPE.PHYSICAL, penetration: 0, fromEffect: false },
+      });
+    }
+    return;
+  }
 
   spark(game.fx, asteroid.x, asteroid.y, 14, '#a08c6e', 200, 0.55, 2.2);
   sfx.boom();

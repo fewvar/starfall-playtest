@@ -44,6 +44,8 @@ export function fireWeapon(game, chargeRatio, forceId, dmgMul = 1) {
   const w = forceId ? getWeapon(forceId) : currentWeapon(p);
 
   counters(p).shots++;
+  // ИСКАЖЕНИЕ зеркалит выстрелы игрока с задержкой (entities/bosses.js)
+  p.lastShotAt = game.time;
   fireHook(game, 'onShoot', { weapon: w });
 
   // Урон: три слоя прокачки × условные множители перков
@@ -249,13 +251,17 @@ function frontShieldFactor(enemy, fromX, fromY, game) {
 // ─────────────────────────────── снаряды врагов
 
 export function spawnFoeBullet(game, from, angle, speed, damage, color, r = 4, damageSpec = PHYSICAL_DAMAGE) {
-  game.projectiles.foeBullets.push({
+  // Возвращаем снаряд, чтобы вызывающий мог дописать редкие поля (homing у
+  // семян Зарослей) — иначе пришлось бы тащить options через десятки вызовов.
+  const bullet = {
     x: from.x + Math.cos(angle) * (from.r * 0.8),
     y: from.y + Math.sin(angle) * (from.r * 0.8),
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
-    damage, color, r, life: 4, damageSpec,
-  });
+    damage, color, r, life: 4, homing: 0, damageSpec,
+  };
+  game.projectiles.foeBullets.push(bullet);
+  return bullet;
 }
 
 export function shootAtPlayer(game, enemy, speed, damage, color, damageSpec = PHYSICAL_DAMAGE) {
@@ -501,6 +507,18 @@ function updateFoeBullets(game, dt) {
   const scale = p.effects.enemyTimeScale; // «Стазис»/«Стоп-кадр» тормозят и вражеские снаряды
   for (let i = list.length - 1; i >= 0; i--) {
     const f = list[i];
+    // самонаведение по тому же принципу, что у снарядов игрока: доворот
+    // ограничен, поэтому от семени можно уйти манёвром, а не только скоростью
+    if (f.homing) {
+      const speed = Math.hypot(f.vx, f.vy);
+      const a = angLerp(
+        Math.atan2(f.vy, f.vx),
+        Math.atan2(p.y - f.y, p.x - f.x),
+        clamp(f.homing * dt * 3, 0, 1),
+      );
+      f.vx = Math.cos(a) * speed;
+      f.vy = Math.sin(a) * speed;
+    }
     f.x += f.vx * dt * scale;
     f.y += f.vy * dt * scale;
     f.life -= dt;
